@@ -1,0 +1,1612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Newton Fintech | AI-Powered Consumer Finance</title>
+<meta name="description" content="Newton Fintech empowers consumer finance with cutting-edge AI technology across Asia, Latin America and beyond.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* ============================================
+   CSS RESET & BASE
+   ============================================ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #111118;
+  --bg-card: #16161f;
+  --bg-card-hover: #1c1c28;
+  --text-primary: #f0f0f5;
+  --text-secondary: #8888a0;
+  --text-muted: #55556a;
+  --accent: #c8ff00;
+  --accent-dim: #a0cc00;
+  --accent-glow: rgba(200, 255, 0, 0.15);
+  --gradient-1: linear-gradient(135deg, #c8ff00 0%, #00d4aa 100%);
+  --gradient-2: linear-gradient(135deg, #6366f1 0%, #c8ff00 100%);
+  --gradient-3: linear-gradient(135deg, #0ea5e9 0%, #c8ff00 50%, #f59e0b 100%);
+  --border: rgba(255, 255, 255, 0.06);
+  --border-accent: rgba(200, 255, 0, 0.2);
+  --radius: 16px;
+  --radius-sm: 8px;
+  --radius-lg: 24px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.3);
+  --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { text-decoration: none; color: inherit; }
+img { max-width: 100%; display: block; }
+button { cursor: pointer; border: none; background: none; font-family: inherit; }
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ============================================
+   ANIMATED BACKGROUND GRID
+   ============================================ */
+.bg-grid {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(200, 255, 0, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200, 255, 0, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none;
+}
+
+.bg-glow {
+  position: fixed;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  filter: blur(150px);
+  opacity: 0.12;
+  pointer-events: none;
+  z-index: 0;
+}
+.bg-glow-1 { top: -200px; right: -100px; background: #c8ff00; }
+.bg-glow-2 { bottom: 20%; left: -200px; background: #6366f1; }
+
+/* ============================================
+   NAVIGATION
+   ============================================ */
+.nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  padding: 16px 0;
+  transition: var(--transition);
+  backdrop-filter: blur(0px);
+}
+.nav.scrolled {
+  background: rgba(10, 10, 15, 0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 800;
+  font-size: 1.2rem;
+  letter-spacing: -0.02em;
+}
+.nav-logo .logo-icon {
+  width: 40px;
+  height: 40px;
+  background: var(--gradient-1);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 0.7rem;
+  color: var(--bg-primary);
+  letter-spacing: 0.05em;
+}
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+  list-style: none;
+}
+.nav-links a {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: var(--transition);
+  position: relative;
+}
+.nav-links a:hover { color: var(--text-primary); }
+.nav-links a::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: var(--accent);
+  transition: var(--transition);
+}
+.nav-links a:hover::after { width: 100%; }
+.nav-cta {
+  padding: 10px 24px;
+  background: var(--accent);
+  color: var(--bg-primary);
+  font-weight: 600;
+  font-size: 0.9rem;
+  border-radius: 100px;
+  transition: var(--transition);
+}
+.nav-cta:hover {
+  background: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(200, 255, 0, 0.3);
+}
+.nav-cta::after { display: none !important; }
+
+/* Mobile menu */
+.nav-toggle {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+}
+.nav-toggle span {
+  display: block;
+  width: 24px;
+  height: 2px;
+  background: var(--text-primary);
+  transition: var(--transition);
+}
+
+/* ============================================
+   HERO SECTION
+   ============================================ */
+.hero {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  padding: 120px 0 80px;
+  z-index: 1;
+  overflow: hidden;
+}
+.hero-content {
+  position: relative;
+  z-index: 2;
+}
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(200, 255, 0, 0.08);
+  border: 1px solid var(--border-accent);
+  border-radius: 100px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--accent);
+  margin-bottom: 32px;
+  animation: fadeInUp 0.8s ease;
+}
+.hero-badge .pulse {
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.5); }
+}
+
+.hero h1 {
+  font-size: clamp(3rem, 7vw, 5.5rem);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  margin-bottom: 24px;
+  animation: fadeInUp 0.8s ease 0.1s both;
+}
+.hero h1 .gradient-text {
+  background: var(--gradient-1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero p {
+  font-size: 1.25rem;
+  color: var(--text-secondary);
+  max-width: 560px;
+  line-height: 1.7;
+  margin-bottom: 40px;
+  animation: fadeInUp 0.8s ease 0.2s both;
+}
+.hero-actions {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  animation: fadeInUp 0.8s ease 0.3s both;
+}
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 32px;
+  background: var(--accent);
+  color: var(--bg-primary);
+  font-weight: 700;
+  font-size: 1rem;
+  border-radius: 100px;
+  transition: var(--transition);
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(200, 255, 0, 0.3);
+}
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 32px;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 1rem;
+  border-radius: 100px;
+  transition: var(--transition);
+  background: rgba(255,255,255,0.03);
+}
+.btn-secondary:hover {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+  transform: translateY(-2px);
+}
+.btn-arrow {
+  transition: transform 0.3s;
+}
+.btn-primary:hover .btn-arrow,
+.btn-secondary:hover .btn-arrow {
+  transform: translateX(4px);
+}
+
+/* Hero stats */
+.hero-stats {
+  display: flex;
+  gap: 48px;
+  margin-top: 64px;
+  padding-top: 40px;
+  border-top: 1px solid var(--border);
+  animation: fadeInUp 0.8s ease 0.4s both;
+}
+.hero-stat h3 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  background: var(--gradient-1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero-stat p {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: 0;
+  max-width: none;
+}
+
+/* Hero visual */
+.hero-visual {
+  position: absolute;
+  right: -5%;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 45%;
+  height: 70%;
+  z-index: 1;
+  opacity: 0.6;
+}
+.hero-orb {
+  position: absolute;
+  border-radius: 50%;
+  animation: float 8s ease-in-out infinite;
+}
+.hero-orb-1 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(200,255,0,0.15) 0%, transparent 70%);
+  top: 10%;
+  right: 10%;
+}
+.hero-orb-2 {
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%);
+  bottom: 10%;
+  right: 30%;
+  animation-delay: -3s;
+}
+.hero-orb-3 {
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(14,165,233,0.1) 0%, transparent 70%);
+  top: 30%;
+  right: 40%;
+  animation-delay: -5s;
+}
+@keyframes float {
+  0%, 100% { transform: translate(0, 0); }
+  33% { transform: translate(20px, -30px); }
+  66% { transform: translate(-15px, 15px); }
+}
+
+/* ============================================
+   SECTION COMMON STYLES
+   ============================================ */
+section {
+  position: relative;
+  z-index: 1;
+  padding: 120px 0;
+}
+.section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+.section-label::before {
+  content: '';
+  width: 24px;
+  height: 2px;
+  background: var(--accent);
+}
+.section-title {
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin-bottom: 20px;
+}
+.section-desc {
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  max-width: 600px;
+  line-height: 1.7;
+}
+
+/* ============================================
+   TECHNOLOGY SECTION
+   ============================================ */
+.tech-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-top: 60px;
+}
+.tech-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 40px 32px;
+  transition: var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+.tech-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--gradient-1);
+  opacity: 0;
+  transition: var(--transition);
+}
+.tech-card:hover {
+  border-color: var(--border-accent);
+  background: var(--bg-card-hover);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+}
+.tech-card:hover::before { opacity: 1; }
+
+.tech-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: var(--accent-glow);
+  border: 1px solid var(--border-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+  font-size: 1.5rem;
+}
+.tech-card h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+  letter-spacing: -0.01em;
+}
+.tech-card p {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+.tech-card .tech-tag {
+  display: inline-block;
+  margin-top: 20px;
+  padding: 4px 12px;
+  background: rgba(200,255,0,0.06);
+  border: 1px solid rgba(200,255,0,0.12);
+  border-radius: 100px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ============================================
+   METRICS SECTION
+   ============================================ */
+.metrics {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 32px;
+  margin-top: 60px;
+}
+.metric-item {
+  text-align: center;
+  padding: 40px 20px;
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  transition: var(--transition);
+}
+.metric-item:hover {
+  border-color: var(--border-accent);
+  transform: translateY(-4px);
+}
+.metric-number {
+  font-size: 3.5rem;
+  font-weight: 900;
+  background: var(--gradient-1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+.metric-label {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* ============================================
+   ABOUT / STORY SECTION
+   ============================================ */
+.about-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 80px;
+  align-items: center;
+  margin-top: 60px;
+}
+.about-text .about-highlight {
+  font-size: 1.1rem;
+  color: var(--text-primary);
+  font-weight: 500;
+  line-height: 1.8;
+  margin-bottom: 24px;
+}
+.about-text p {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  line-height: 1.8;
+  margin-bottom: 16px;
+}
+.about-visual {
+  position: relative;
+}
+.about-visual-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 48px;
+  position: relative;
+  overflow: hidden;
+}
+.about-visual-card::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+  pointer-events: none;
+}
+.timeline {
+  position: relative;
+  padding-left: 32px;
+}
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg, var(--accent), transparent);
+}
+.timeline-item {
+  position: relative;
+  margin-bottom: 32px;
+}
+.timeline-item:last-child { margin-bottom: 0; }
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -37px;
+  top: 6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+.timeline-year {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 4px;
+}
+.timeline-item h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.timeline-item p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* ============================================
+   PRODUCTS SECTION
+   ============================================ */
+.products {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.products-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-top: 60px;
+}
+.product-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 40px 32px;
+  transition: var(--transition);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.product-card:hover {
+  border-color: var(--border-accent);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+}
+.product-number {
+  font-size: 4rem;
+  font-weight: 900;
+  line-height: 1;
+  background: linear-gradient(135deg, rgba(200,255,0,0.2), rgba(200,255,0,0.05));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 24px;
+}
+.product-card h3 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+  letter-spacing: -0.01em;
+}
+.product-card p {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  flex-grow: 1;
+}
+.product-features {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.product-feature {
+  padding: 4px 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* ============================================
+   AWARDS SECTION
+   ============================================ */
+.awards-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 64px;
+  margin-top: 60px;
+  flex-wrap: wrap;
+}
+.award-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  opacity: 0.6;
+  transition: var(--transition);
+  padding: 32px;
+}
+.award-item:hover { opacity: 1; }
+.award-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  transition: var(--transition);
+}
+.award-item:hover .award-icon {
+  border-color: var(--border-accent);
+  box-shadow: 0 0 30px var(--accent-glow);
+}
+.award-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+}
+.award-detail {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* ============================================
+   GLOBAL PRESENCE
+   ============================================ */
+.presence {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.presence-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 80px;
+  align-items: center;
+  margin-top: 60px;
+}
+.region-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.region-item {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+}
+.region-item:hover {
+  border-color: var(--border-accent);
+  transform: translateX(8px);
+}
+.region-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+.region-item h4 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.region-item p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.presence-map {
+  position: relative;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.map-globe {
+  width: 100%;
+  max-width: 400px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(200,255,0,0.08), transparent 60%),
+    radial-gradient(circle at 70% 60%, rgba(99,102,241,0.08), transparent 60%),
+    var(--bg-card);
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+.map-globe::before {
+  content: '';
+  position: absolute;
+  inset: 20px;
+  border-radius: 50%;
+  border: 1px dashed rgba(200,255,0,0.15);
+}
+.map-globe::after {
+  content: '';
+  position: absolute;
+  inset: 50px;
+  border-radius: 50%;
+  border: 1px dashed rgba(200,255,0,0.08);
+}
+.map-dot {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 20px var(--accent-glow);
+  animation: pulse 3s ease-in-out infinite;
+}
+.map-dot:nth-child(1) { top: 25%; left: 65%; animation-delay: 0s; }
+.map-dot:nth-child(2) { top: 35%; left: 72%; animation-delay: 0.5s; }
+.map-dot:nth-child(3) { top: 55%; left: 30%; animation-delay: 1s; }
+.map-dot:nth-child(4) { top: 40%; left: 45%; animation-delay: 1.5s; }
+.map-dot:nth-child(5) { top: 60%; left: 55%; animation-delay: 2s; }
+.map-dot:nth-child(6) { top: 30%; left: 52%; animation-delay: 2.5s; }
+.map-dot:nth-child(7) { top: 50%; left: 68%; animation-delay: 0.8s; }
+
+/* ============================================
+   CONTACT SECTION
+   ============================================ */
+.contact-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 80px;
+  margin-top: 60px;
+}
+.contact-info { display: flex; flex-direction: column; gap: 32px; }
+.contact-item {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.contact-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--accent-glow);
+  border: 1px solid var(--border-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1.2rem;
+}
+.contact-item h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.contact-item p {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.contact-form {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 40px;
+}
+.form-group {
+  margin-bottom: 20px;
+}
+.form-group label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.form-group input,
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.95rem;
+  transition: var(--transition);
+  outline: none;
+}
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.form-group textarea { resize: vertical; min-height: 120px; }
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.form-submit {
+  width: 100%;
+  padding: 16px;
+  background: var(--accent);
+  color: var(--bg-primary);
+  font-weight: 700;
+  font-size: 1rem;
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+  margin-top: 8px;
+}
+.form-submit:hover {
+  background: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(200, 255, 0, 0.3);
+}
+
+/* ============================================
+   FOOTER
+   ============================================ */
+.footer {
+  position: relative;
+  z-index: 1;
+  padding: 80px 0 40px;
+  border-top: 1px solid var(--border);
+}
+.footer-top {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 48px;
+  padding-bottom: 48px;
+  border-bottom: 1px solid var(--border);
+}
+.footer-brand p {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin-top: 16px;
+  max-width: 300px;
+}
+.footer-col h4 {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+}
+.footer-col ul { list-style: none; }
+.footer-col li { margin-bottom: 12px; }
+.footer-col a {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  transition: var(--transition);
+}
+.footer-col a:hover { color: var(--accent); }
+.footer-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 32px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.footer-social {
+  display: flex;
+  gap: 16px;
+}
+.footer-social a {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+  font-size: 0.9rem;
+}
+.footer-social a:hover {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+  color: var(--accent);
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+.fade-in.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+@media (max-width: 1024px) {
+  .tech-grid, .products-grid { grid-template-columns: repeat(2, 1fr); }
+  .about-layout, .presence-content, .contact-layout { grid-template-columns: 1fr; gap: 48px; }
+  .hero-visual { display: none; }
+  .footer-top { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 768px) {
+  .nav-links { display: none; }
+  .nav-toggle { display: flex; }
+  .nav-links.active {
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: rgba(10,10,15,0.98);
+    backdrop-filter: blur(20px);
+    padding: 24px;
+    border-bottom: 1px solid var(--border);
+    gap: 20px;
+  }
+  .hero h1 { font-size: 2.5rem; }
+  .hero-stats { flex-direction: column; gap: 24px; }
+  .tech-grid, .products-grid, .metrics-grid { grid-template-columns: 1fr; }
+  .form-row { grid-template-columns: 1fr; }
+  .footer-top { grid-template-columns: 1fr; }
+  .footer-bottom { flex-direction: column; gap: 16px; text-align: center; }
+  .awards-row { gap: 32px; }
+  section { padding: 80px 0; }
+}
+
+/* ============================================
+   SCROLL COUNTER ANIMATION
+   ============================================ */
+.counter { display: inline-block; }
+</style>
+</head>
+<body>
+
+<!-- Background Effects -->
+<div class="bg-grid"></div>
+<div class="bg-glow bg-glow-1"></div>
+<div class="bg-glow bg-glow-2"></div>
+
+<!-- Navigation -->
+<nav class="nav" id="nav">
+  <div class="nav-inner">
+    <a href="#" class="nav-logo">
+      <div class="logo-icon">N</div>
+      <span>NEWTON</span>
+    </a>
+    <ul class="nav-links" id="navLinks">
+      <li><a href="#technology">Technology</a></li>
+      <li><a href="#about">About</a></li>
+      <li><a href="#products">Products</a></li>
+      <li><a href="#presence">Global</a></li>
+      <li><a href="#contact" class="nav-cta">Get in Touch</a></li>
+    </ul>
+    <button class="nav-toggle" id="navToggle" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero" id="home">
+  <div class="hero-visual">
+    <div class="hero-orb hero-orb-1"></div>
+    <div class="hero-orb hero-orb-2"></div>
+    <div class="hero-orb hero-orb-3"></div>
+  </div>
+  <div class="container hero-content">
+    <div class="hero-badge">
+      <span class="pulse"></span>
+      AI-Powered Fintech — Operating in 7+ Countries
+    </div>
+    <h1>
+      Empowering<br>
+      Consumer Finance<br>
+      <span class="gradient-text">with AI</span>
+    </h1>
+    <p>
+      We combine cutting-edge artificial intelligence with deep financial expertise
+      to transform credit risk assessment, scoring, and decision-making across
+      emerging markets worldwide.
+    </p>
+    <div class="hero-actions">
+      <a href="#contact" class="btn-primary">
+        Partner With Us <span class="btn-arrow">&rarr;</span>
+      </a>
+      <a href="#about" class="btn-secondary">
+        Our Story <span class="btn-arrow">&rarr;</span>
+      </a>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <h3><span class="counter" data-target="93">0</span>%</h3>
+        <p>Risk Assessment Accuracy</p>
+      </div>
+      <div class="hero-stat">
+        <h3><span class="counter" data-target="7">0</span>+</h3>
+        <p>Countries</p>
+      </div>
+      <div class="hero-stat">
+        <h3><span class="counter" data-target="20">0</span>+</h3>
+        <p>Years Combined Experience</p>
+      </div>
+      <div class="hero-stat">
+        <h3><span class="counter" data-target="10">0</span>M+</h3>
+        <p>Users Served</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Technology / Advantages -->
+<section id="technology">
+  <div class="container">
+    <div class="fade-in">
+      <span class="section-label">Our Advantage</span>
+      <h2 class="section-title">Built Different.<br>Built Smarter.</h2>
+      <p class="section-desc">
+        Three core pillars power everything we do — deep fintech expertise,
+        battle-tested experience, and proprietary AI technology.
+      </p>
+    </div>
+    <div class="tech-grid">
+      <div class="tech-card fade-in">
+        <div class="tech-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <h3>Fintech-Native</h3>
+        <p>Purpose-built for consumer finance from day one. Our proprietary algorithms analyze vast datasets to identify anomalies and assess credit risk with up to 93% efficiency improvement.</p>
+        <span class="tech-tag">Core Platform</span>
+      </div>
+      <div class="tech-card fade-in">
+        <div class="tech-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent)"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        </div>
+        <h3>Global Experience</h3>
+        <p>Our management team brings 20+ years of combined experience in financial services and technology, with proven operations across 10+ countries in Asia, Latin America, and Africa.</p>
+        <span class="tech-tag">Multi-Market</span>
+      </div>
+      <div class="tech-card fade-in">
+        <div class="tech-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent)"><path d="M12 2a4 4 0 0 0-4 4v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2h-2V6a4 4 0 0 0-4-4z"/><circle cx="12" cy="15" r="2"/></svg>
+        </div>
+        <h3>AI-Powered Intelligence</h3>
+        <p>Real-time data analysis with smart insights and automated recommendations. Our adaptive learning framework continuously refines models for ever-improving accuracy and efficiency.</p>
+        <span class="tech-tag">Machine Learning</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Metrics -->
+<section class="metrics" id="metrics">
+  <div class="container">
+    <div class="fade-in" style="text-align: center;">
+      <span class="section-label" style="justify-content: center;">Impact at Scale</span>
+      <h2 class="section-title" style="margin-left: auto; margin-right: auto;">Numbers That Speak</h2>
+    </div>
+    <div class="metrics-grid">
+      <div class="metric-item fade-in">
+        <div class="metric-number"><span class="counter" data-target="93">0</span>%</div>
+        <div class="metric-label">Credit Assessment<br>Efficiency Improvement</div>
+      </div>
+      <div class="metric-item fade-in">
+        <div class="metric-number"><span class="counter" data-target="7">0</span>+</div>
+        <div class="metric-label">Countries with<br>Active Operations</div>
+      </div>
+      <div class="metric-item fade-in">
+        <div class="metric-number"><span class="counter" data-target="3">0</span></div>
+        <div class="metric-label">Continents<br>Covered</div>
+      </div>
+      <div class="metric-item fade-in">
+        <div class="metric-number">24/7</div>
+        <div class="metric-label">Real-time<br>AI Monitoring</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- About -->
+<section id="about">
+  <div class="container">
+    <div class="fade-in">
+      <span class="section-label">About Us</span>
+      <h2 class="section-title">Our Story</h2>
+    </div>
+    <div class="about-layout">
+      <div class="about-text fade-in">
+        <p class="about-highlight">
+          Founded in 2017, Newton Fintech has grown into a leading fintech company
+          operating across Southeast Asia and Latin America, with headquarters in Barcelona, Spain.
+        </p>
+        <p>
+          Our core offerings include neobanking and consumer credit solutions,
+          enhanced by the power of artificial intelligence. As one of the
+          fastest-growing fintech companies in Asia, we are also one of the few
+          to provide multinational mobile personal finance services.
+        </p>
+        <p>
+          Today, we operate offices in 7 countries, serving millions of users with
+          innovative financial products that combine local market expertise with
+          world-class AI technology.
+        </p>
+      </div>
+      <div class="about-visual fade-in">
+        <div class="about-visual-card">
+          <div class="timeline">
+            <div class="timeline-item">
+              <div class="timeline-year">2017</div>
+              <h4>The Idea Begins</h4>
+              <p>Parent company founded with a vision for AI-driven finance</p>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-year">2019</div>
+              <h4>Southeast Asia Expansion</h4>
+              <p>Launched operations across multiple Asian markets</p>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-year">2021</div>
+              <h4>Latin America Entry</h4>
+              <p>Extended footprint into LATAM consumer lending</p>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-year">2023</div>
+              <h4>7 Countries & Growing</h4>
+              <p>Offices across 3 continents, recognized by Forbes 30 Under 30</p>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-year">Now</div>
+              <h4>Newton Fintech Spain</h4>
+              <p>Barcelona-based HQ driving the next generation of fintech AI</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Products -->
+<section class="products" id="products">
+  <div class="container">
+    <div class="fade-in">
+      <span class="section-label">Products</span>
+      <h2 class="section-title">What We Build</h2>
+      <p class="section-desc">
+        A comprehensive suite of AI-powered financial tools
+        designed to serve every stage of the consumer credit lifecycle.
+      </p>
+    </div>
+    <div class="products-grid">
+      <div class="product-card fade-in">
+        <div class="product-number">01</div>
+        <h3>AI-Enhanced Credit Risk Analytics</h3>
+        <p>Advanced algorithms that analyze vast datasets in real-time, identifying risk patterns and anomalies with unprecedented speed and accuracy.</p>
+        <div class="product-features">
+          <span class="product-feature">Real-time Analysis</span>
+          <span class="product-feature">Anomaly Detection</span>
+          <span class="product-feature">Risk Scoring</span>
+        </div>
+      </div>
+      <div class="product-card fade-in">
+        <div class="product-number">02</div>
+        <h3>Proprietary Credit Scoring</h3>
+        <p>Our own scoring models built from millions of data points across emerging markets, providing credit visibility where traditional bureaus fall short.</p>
+        <div class="product-features">
+          <span class="product-feature">Alternative Data</span>
+          <span class="product-feature">ML Models</span>
+          <span class="product-feature">Multi-Market</span>
+        </div>
+      </div>
+      <div class="product-card fade-in">
+        <div class="product-number">03</div>
+        <h3>Automated Credit Decision & Management</h3>
+        <p>End-to-end automated systems for credit origination, underwriting, and portfolio management — reducing manual intervention by up to 80%.</p>
+        <div class="product-features">
+          <span class="product-feature">Auto Underwriting</span>
+          <span class="product-feature">Portfolio Mgmt</span>
+          <span class="product-feature">API-First</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Awards -->
+<section id="awards">
+  <div class="container">
+    <div class="fade-in" style="text-align: center;">
+      <span class="section-label" style="justify-content: center;">Recognition</span>
+      <h2 class="section-title" style="margin-left: auto; margin-right: auto;">Award-Winning Innovation</h2>
+      <p class="section-desc" style="margin-left: auto; margin-right: auto; text-align: center;">
+        Our work has been recognized by leading organizations worldwide.
+      </p>
+    </div>
+    <div class="awards-row fade-in">
+      <div class="award-item">
+        <div class="award-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><path d="M12 15l-3.5 2 .67-3.89L6 10.11l3.92-.57L12 6l2.08 3.54 3.92.57-2.83 2.76.67 3.89z"/></svg>
+        </div>
+        <div class="award-name">Forbes 30 Under 30</div>
+        <div class="award-detail">Asia &middot; Fintech</div>
+      </div>
+      <div class="award-item">
+        <div class="award-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><path d="M6 9l6-6 6 6"/><path d="M12 3v14"/><path d="M5 21h14"/></svg>
+        </div>
+        <div class="award-name">OTEC Innovation</div>
+        <div class="award-detail">Overseas Talent Entrepreneurship</div>
+      </div>
+      <div class="award-item">
+        <div class="award-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>
+        </div>
+        <div class="award-name">National Tech Enterprise</div>
+        <div class="award-detail">Innovation & Technology</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Global Presence -->
+<section class="presence" id="presence">
+  <div class="container">
+    <div class="fade-in">
+      <span class="section-label">Global Presence</span>
+      <h2 class="section-title">Operating Worldwide</h2>
+      <p class="section-desc">
+        From Barcelona to Jakarta, we serve diverse markets with
+        localized solutions powered by global intelligence.
+      </p>
+    </div>
+    <div class="presence-content">
+      <div class="region-list fade-in">
+        <div class="region-item">
+          <div class="region-dot"></div>
+          <div>
+            <h4>Southeast Asia</h4>
+            <p>Indonesia, Philippines, Vietnam &mdash; High-growth consumer lending markets</p>
+          </div>
+        </div>
+        <div class="region-item">
+          <div class="region-dot"></div>
+          <div>
+            <h4>Latin America</h4>
+            <p>Mexico, Colombia &mdash; Expanding financial inclusion across LATAM</p>
+          </div>
+        </div>
+        <div class="region-item">
+          <div class="region-dot"></div>
+          <div>
+            <h4>Europe</h4>
+            <p>Spain (Barcelona HQ) &mdash; Technology and operations center</p>
+          </div>
+        </div>
+        <div class="region-item">
+          <div class="region-dot"></div>
+          <div>
+            <h4>Africa</h4>
+            <p>Emerging market operations &mdash; Pioneering mobile-first finance</p>
+          </div>
+        </div>
+      </div>
+      <div class="presence-map fade-in">
+        <div class="map-globe">
+          <div class="map-dot"></div>
+          <div class="map-dot"></div>
+          <div class="map-dot"></div>
+          <div class="map-dot"></div>
+          <div class="map-dot"></div>
+          <div class="map-dot"></div>
+          <div class="map-dot"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Contact -->
+<section id="contact">
+  <div class="container">
+    <div class="fade-in">
+      <span class="section-label">Contact</span>
+      <h2 class="section-title">Let's Build Together</h2>
+      <p class="section-desc">
+        Whether you're exploring a partnership, investment opportunity,
+        or career — we'd love to hear from you.
+      </p>
+    </div>
+    <div class="contact-layout">
+      <div class="contact-info fade-in">
+        <div class="contact-item">
+          <div class="contact-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          </div>
+          <div>
+            <h4>Headquarters</h4>
+            <p>Barcelona, Spain</p>
+          </div>
+        </div>
+        <div class="contact-item">
+          <div class="contact-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          </div>
+          <div>
+            <h4>Email</h4>
+            <p>contact@newton-fintech.com</p>
+          </div>
+        </div>
+        <div class="contact-item">
+          <div class="contact-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          </div>
+          <div>
+            <h4>Website</h4>
+            <p>www.newton-fintech.com</p>
+          </div>
+        </div>
+      </div>
+      <form class="contact-form fade-in" onsubmit="handleSubmit(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label>First Name</label>
+            <input type="text" placeholder="John" required>
+          </div>
+          <div class="form-group">
+            <label>Last Name</label>
+            <input type="text" placeholder="Doe" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" placeholder="john@company.com" required>
+        </div>
+        <div class="form-group">
+          <label>I'm interested in...</label>
+          <select>
+            <option>Partnership Opportunity</option>
+            <option>Investment Inquiry</option>
+            <option>Career Opportunities</option>
+            <option>Product Demo</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Message</label>
+          <textarea placeholder="Tell us about your needs..."></textarea>
+        </div>
+        <button type="submit" class="form-submit">Send Message &rarr;</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a href="#" class="nav-logo">
+          <div class="logo-icon">N</div>
+          <span>NEWTON</span>
+        </a>
+        <p>Empowering consumer finance with cutting-edge AI technology across emerging markets worldwide.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="#about">About Us</a></li>
+          <li><a href="#awards">Awards</a></li>
+          <li><a href="#presence">Global Presence</a></li>
+          <li><a href="#contact">Contact</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Products</h4>
+        <ul>
+          <li><a href="#products">Credit Risk Analytics</a></li>
+          <li><a href="#products">Credit Scoring</a></li>
+          <li><a href="#products">Decision System</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Connect</h4>
+        <ul>
+          <li><a href="#">LinkedIn</a></li>
+          <li><a href="#">Twitter</a></li>
+          <li><a href="mailto:contact@newton-fintech.com">Email Us</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>&copy; 2026 Newton Fintech Spain. All rights reserved.</span>
+      <div class="footer-social">
+        <a href="#" aria-label="LinkedIn">in</a>
+        <a href="#" aria-label="Twitter">𝕏</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+// ============================================
+// Navigation Scroll Effect
+// ============================================
+const nav = document.getElementById('nav');
+window.addEventListener('scroll', () => {
+  nav.classList.toggle('scrolled', window.scrollY > 50);
+});
+
+// Mobile menu toggle
+const navToggle = document.getElementById('navToggle');
+const navLinks = document.getElementById('navLinks');
+navToggle.addEventListener('click', () => {
+  navLinks.classList.toggle('active');
+});
+// Close mobile menu on link click
+navLinks.querySelectorAll('a').forEach(link => {
+  link.addEventListener('click', () => navLinks.classList.remove('active'));
+});
+
+// ============================================
+// Scroll Animations (Intersection Observer)
+// ============================================
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+
+// ============================================
+// Counter Animation
+// ============================================
+const counterObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting && !entry.target.dataset.counted) {
+      entry.target.dataset.counted = 'true';
+      const target = +entry.target.dataset.target;
+      const duration = 2000;
+      const start = performance.now();
+      const animate = (now) => {
+        const progress = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 4);
+        entry.target.textContent = Math.round(target * eased);
+        if (progress < 1) requestAnimationFrame(animate);
+      };
+      requestAnimationFrame(animate);
+    }
+  });
+}, { threshold: 0.5 });
+
+document.querySelectorAll('.counter').forEach(el => counterObserver.observe(el));
+
+// ============================================
+// Smooth scroll for anchor links
+// ============================================
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+  anchor.addEventListener('click', (e) => {
+    e.preventDefault();
+    const target = document.querySelector(anchor.getAttribute('href'));
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+});
+
+// ============================================
+// Form submission handler
+// ============================================
+function handleSubmit(e) {
+  e.preventDefault();
+  const btn = e.target.querySelector('.form-submit');
+  btn.textContent = 'Message Sent!';
+  btn.style.background = '#00d4aa';
+  setTimeout(() => {
+    btn.textContent = 'Send Message →';
+    btn.style.background = '';
+    e.target.reset();
+  }, 3000);
+}
+</script>
+</body>
+</html>
