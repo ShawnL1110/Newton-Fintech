@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog de Finanzas Personales | One Prestamos</title>
+  <meta name="description" content="Consejos de finanzas personales, guías sobre préstamos rápidos y educación financiera en España. Blog oficial de One Prestamos.">
+  <meta name="keywords" content="blog finanzas, préstamos rápidos, educación financiera, créditos online España">
+  <link rel="canonical" href="https://www.oneprestamos.com/blog/">
+  <!-- Open Graph -->
+  <meta property="og:title" content="Blog de Finanzas Personales | One Prestamos">
+  <meta property="og:description" content="Consejos de finanzas personales, guías sobre préstamos y educación financiera en España.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://www.oneprestamos.com/blog/">
+  <!-- Schema.org -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Blog",
+    "name": "Blog One Prestamos",
+    "description": "Blog de finanzas personales y guías sobre préstamos rápidos en España",
+    "url": "https://www.oneprestamos.com/blog/",
+    "publisher": {
+      "@type": "Organization",
+      "name": "One Prestamos",
+      "url": "https://www.oneprestamos.com"
+    }
+  }
+  </script>
+  <style>
+    /* ===== Reset & Base ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      color: #333; background: #FAFAFA; line-height: 1.6;
+    }
+    a { text-decoration: none; color: inherit; }
+    img { max-width: 100%; display: block; }
+
+    /* ===== Navbar (matches oneprestamos.com) ===== */
+    .navbar {
+      background: #fff; border-top: 3px solid #E8604C;
+      position: sticky; top: 0; z-index: 100;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .navbar-inner {
+      max-width: 1200px; margin: 0 auto; padding: 0 20px;
+      display: flex; align-items: center; justify-content: space-between; height: 60px;
+    }
+    .navbar-logo {
+      font-size: 20px; font-weight: 800; color: #333; letter-spacing: -.3px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .navbar-logo .logo-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; background: #E8604C; color: #fff;
+      border-radius: 6px; font-size: 16px; font-weight: 800;
+    }
+    .navbar-logo .one { color: #333; }
+    .navbar-logo .prestamos { color: #333; font-weight: 800; text-transform: uppercase; }
+    .navbar-links { display: flex; gap: 24px; align-items: center; }
+    .navbar-links a {
+      font-size: 14px; font-weight: 500; color: #E8604C; transition: opacity .2s;
+    }
+    .navbar-links a:hover { opacity: .7; }
+    .navbar-links .btn-login {
+      background: #333; color: #fff; padding: 8px 18px; border-radius: 20px;
+      font-weight: 600; font-size: 13px; transition: background .2s;
+    }
+    .navbar-links .btn-login:hover { background: #555; }
+    .navbar-phone {
+      color: #E8604C; font-weight: 600; font-size: 14px;
+    }
+
+    /* ===== Hero ===== */
+    .blog-hero {
+      background: linear-gradient(135deg, #E8604C 0%, #F4845F 100%);
+      color: #fff; padding: 52px 24px 44px; text-align: center;
+    }
+    .blog-hero h1 { font-size: 30px; font-weight: 700; margin-bottom: 10px; }
+    .blog-hero p { font-size: 15px; opacity: .9; max-width: 560px; margin: 0 auto; }
+
+    /* ===== Category Filter ===== */
+    .category-bar {
+      max-width: 1200px; margin: 0 auto; padding: 20px 20px 0;
+      display: flex; gap: 8px; flex-wrap: wrap;
+    }
+    .cat-btn {
+      padding: 7px 18px; border-radius: 20px; border: 1.5px solid #E0E0E0;
+      background: #fff; font-size: 13px; font-weight: 500; color: #666;
+      cursor: pointer; transition: all .2s; font-family: inherit;
+    }
+    .cat-btn:hover { border-color: #E8604C; color: #E8604C; }
+    .cat-btn.active { background: #E8604C; color: #fff; border-color: #E8604C; }
+
+    /* ===== Article Grid ===== */
+    .articles-grid {
+      max-width: 1200px; margin: 0 auto; padding: 20px;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    }
+
+    .article-card {
+      background: #fff; border-radius: 12px; overflow: hidden;
+      border: 1px solid #F0F0F0;
+      transition: transform .2s, box-shadow .2s;
+      display: flex; flex-direction: column;
+    }
+    .article-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,.08); }
+
+    .card-image {
+      width: 100%; aspect-ratio: 16/9; background: #FFF5F3;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden; position: relative;
+    }
+    .card-image img { width: 100%; height: 100%; object-fit: cover; }
+    .card-image .placeholder-icon {
+      font-size: 56px; opacity: .15;
+    }
+
+    .card-body { padding: 20px; flex: 1; display: flex; flex-direction: column; }
+    .card-meta {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 12px;
+    }
+    .card-category {
+      padding: 3px 10px; border-radius: 12px; font-weight: 600; font-size: 11px;
+      text-transform: uppercase; letter-spacing: .3px;
+    }
+    .card-date { color: #999; }
+
+    .card-body h2 {
+      font-size: 17px; font-weight: 700; color: #333; line-height: 1.4;
+      margin-bottom: 10px;
+    }
+    .card-body p {
+      font-size: 14px; color: #777; line-height: 1.55; flex: 1;
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .card-footer {
+      padding: 0 20px 18px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .read-more {
+      font-size: 13px; font-weight: 600; color: #E8604C;
+      display: flex; align-items: center; gap: 4px; transition: gap .2s;
+    }
+    .read-more:hover { gap: 8px; }
+    .read-time { font-size: 12px; color: #BBB; }
+
+    /* ===== Trust Bar ===== */
+    .trust-bar {
+      max-width: 1200px; margin: 32px auto 0; padding: 0 20px;
+      display: flex; align-items: center; justify-content: center; gap: 40px;
+      opacity: .5;
+    }
+    .trust-bar span { font-size: 13px; font-weight: 600; color: #999; letter-spacing: .5px; }
+
+    /* ===== Footer ===== */
+    .blog-footer {
+      background: #333; color: #fff; padding: 40px 24px; margin-top: 48px;
+    }
+    .footer-inner {
+      max-width: 1200px; margin: 0 auto;
+      display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 40px;
+    }
+    .footer-brand h3 { font-size: 18px; margin-bottom: 8px; font-weight: 700; }
+    .footer-brand h3 .accent { color: #E8604C; }
+    .footer-brand p { font-size: 13px; opacity: .6; line-height: 1.6; }
+    .footer-col h4 { font-size: 13px; margin-bottom: 12px; opacity: .4; text-transform: uppercase; letter-spacing: .5px; }
+    .footer-col a { display: block; font-size: 13px; opacity: .7; margin-bottom: 8px; transition: opacity .2s; }
+    .footer-col a:hover { opacity: 1; color: #E8604C; }
+    .footer-badges { display: flex; gap: 12px; margin-top: 16px; align-items: center; }
+    .badge-aemip {
+      background: rgba(255,255,255,.1); padding: 5px 12px; border-radius: 4px;
+      font-size: 11px; font-weight: 600; letter-spacing: .3px;
+    }
+    .footer-bottom {
+      max-width: 1200px; margin: 0 auto; padding-top: 20px; margin-top: 20px;
+      border-top: 1px solid rgba(255,255,255,.1);
+      font-size: 12px; opacity: .4; text-align: center;
+    }
+
+    /* ===== Empty state ===== */
+    .no-articles {
+      grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: #999;
+    }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 900px) {
+      .articles-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+      .footer-inner { grid-template-columns: 1fr; gap: 24px; }
+      .trust-bar { gap: 20px; flex-wrap: wrap; }
+    }
+    @media (max-width: 600px) {
+      .articles-grid { grid-template-columns: 1fr; padding: 16px; }
+      .blog-hero { padding: 36px 16px 32px; }
+      .blog-hero h1 { font-size: 22px; }
+      .blog-hero p { font-size: 14px; }
+      .navbar-inner { padding: 0 12px; }
+      .navbar-links { gap: 12px; }
+      .navbar-links a.nav-link { display: none; }
+      .navbar-phone { display: none; }
+      .category-bar { padding: 16px 16px 0; gap: 6px; }
+      .cat-btn { padding: 6px 14px; font-size: 12px; }
+      .card-body h2 { font-size: 16px; }
+      .trust-bar { display: none; }
+    }
+
+    /* Small phone */
+    @media (max-width: 380px) {
+      .navbar-logo { font-size: 17px; }
+      .navbar-links .btn-login { padding: 6px 14px; font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="navbar-inner">
+      <a href="https://www.oneprestamos.com" class="navbar-logo">
+        <span class="logo-icon">1</span>
+        <span class="one">ONE </span><span class="prestamos">PRESTAMOS</span>
+      </a>
+      <div class="navbar-links">
+        <span class="navbar-phone">900 808 635</span>
+        <a href="https://www.oneprestamos.com" class="nav-link">Prestamos</a>
+        <a href="index.html" class="nav-link" style="font-weight:700;">Blog</a>
+        <a href="https://www.oneprestamos.com" class="btn-login">Iniciar/Registrarse</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="blog-hero">
+    <h1>Blog de One Prestamos</h1>
+    <p>Educacion financiera, guias practicas y todo lo que necesitas saber sobre prestamos online en Espana.</p>
+  </section>
+
+  <!-- Category Filter -->
+  <div class="category-bar" id="categoryBar"></div>
+
+  <!-- Articles Grid -->
+  <div class="articles-grid" id="articlesGrid">
+    <!-- Populated by JS -->
+  </div>
+
+  <!-- Trust Bar -->
+  <div class="trust-bar">
+    <span>MasterCard</span>
+    <span>VISA</span>
+    <span>ASNEF</span>
+    <span>AEMIP</span>
+  </div>
+
+  <!-- Footer -->
+  <footer class="blog-footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <h3>One <span class="accent">Prestamos</span></h3>
+        <p>Prestamos rapidos online de 200 a 1.600 euros. Aprobacion en 10 minutos. Operamos bajo la legislacion espanola y cumplimos con el RGPD.</p>
+        <div class="footer-badges">
+          <span class="badge-aemip">AEMIP Asociado</span>
+          <span class="badge-aemip">RGPD</span>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h4>Empresa</h4>
+        <a href="https://www.oneprestamos.com">Inicio</a>
+        <a href="#">Sobre nosotros</a>
+        <a href="index.html">Blog</a>
+        <a href="#">Soporte</a>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <a href="#">Politica de privacidad</a>
+        <a href="#">Terminos y condiciones</a>
+        <a href="#">Politica de cookies</a>
+        <a href="#">Reclamaciones</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      &copy; 2026 Newton Fintech Investment Spain, S.L. Todos los derechos reservados.
+    </div>
+  </footer>
+
+  <script src="articles.js"></script>
+  <script>
+    // Render category buttons
+    const categoryBar = document.getElementById('categoryBar');
+    Object.entries(CATEGORIES).forEach(([key, cat]) => {
+      const btn = document.createElement('button');
+      btn.className = 'cat-btn' + (key === 'all' ? ' active' : '');
+      btn.textContent = cat.label;
+      btn.dataset.category = key;
+      btn.onclick = () => filterArticles(key);
+      categoryBar.appendChild(btn);
+    });
+
+    // Render articles
+    function renderArticles(articles) {
+      const grid = document.getElementById('articlesGrid');
+      if (articles.length === 0) {
+        grid.innerHTML = '<div class="no-articles"><p>No hay articulos en esta categoria todavia.</p></div>';
+        return;
+      }
+      grid.innerHTML = articles.map(a => {
+        const cat = CATEGORIES[a.category] || { label: a.categoryLabel, color: '#666' };
+        return `
+        <a href="${a.url}" class="article-card">
+          <div class="card-image">
+            ${a.image ? `<img src="${a.image}" alt="${a.title}" loading="lazy">` : '<div class="placeholder-icon">&#128196;</div>'}
+          </div>
+          <div class="card-body">
+            <div class="card-meta">
+              <span class="card-category" style="background:${cat.color}15;color:${cat.color}">${cat.label}</span>
+              <span class="card-date">${formatDateES(a.date)}</span>
+            </div>
+            <h2>${a.title}</h2>
+            <p>${a.excerpt}</p>
+          </div>
+          <div class="card-footer">
+            <span class="read-more">Leer mas &rarr;</span>
+            <span class="read-time">${a.readTime} de lectura</span>
+          </div>
+        </a>`;
+      }).join('');
+    }
+
+    function filterArticles(category) {
+      document.querySelectorAll('.cat-btn').forEach(b => b.classList.toggle('active', b.dataset.category === category));
+      const filtered = category === 'all' ? ARTICLES : ARTICLES.filter(a => a.category === category);
+      renderArticles(filtered);
+    }
+
+    // Initial render
+    renderArticles(ARTICLES);
+  </script>
+</body>
+</html>
