@@ -88,8 +88,6 @@ class SubtitleWindow:
         self.status_font = tkfont.Font(family=family, size=11)
         self.grip_font = tkfont.Font(family=family, size=13)
 
-        # Pre-load logo at the sizes we need. Hold references so the images
-        # survive garbage collection.
         self._logo_small = _load_logo(22)
         self._logo_watermark = _load_logo(90, alpha=0.18)
 
@@ -98,12 +96,7 @@ class SubtitleWindow:
         top_bar.pack(fill="x", padx=12, pady=(8, 0))
 
         self.controls = tk.Canvas(
-            top_bar,
-            width=64,
-            height=18,
-            bg=BG_COLOR,
-            bd=0,
-            highlightthickness=0,
+            top_bar, width=64, height=18, bg=BG_COLOR, bd=0, highlightthickness=0,
         )
         self.controls.pack(side="left")
 
@@ -134,9 +127,7 @@ class SubtitleWindow:
         self.controls.bind("<B1-Motion>", self._on_drag)
 
         if self._logo_small:
-            self.logo_label = tk.Label(
-                top_bar, image=self._logo_small, bg=BG_COLOR, bd=0,
-            )
+            self.logo_label = tk.Label(top_bar, image=self._logo_small, bg=BG_COLOR, bd=0)
             self.logo_label.pack(side="right", padx=(0, 2))
             self.logo_label.bind("<ButtonPress-1>", self._on_press)
             self.logo_label.bind("<B1-Motion>", self._on_drag)
@@ -145,15 +136,8 @@ class SubtitleWindow:
 
         # === Main content ===
         self.content = tk.Text(
-            self.root,
-            bg=BG_COLOR,
-            fg="#ffffff",
-            bd=0,
-            highlightthickness=0,
-            wrap="word",
-            padx=20,
-            pady=6,
-            cursor="hand2",
+            self.root, bg=BG_COLOR, fg="#ffffff", bd=0, highlightthickness=0,
+            wrap="word", padx=20, pady=6, cursor="hand2",
         )
         self.content.pack(fill="both", expand=True)
 
@@ -163,36 +147,36 @@ class SubtitleWindow:
             self.content.tag_configure(f"speaker_{i}", font=self.speaker_font, foreground=color)
         self.content.configure(state="disabled")
 
-        # === Status bar ===
+        # === Status bar: status text (left) + session cost (right) ===
         self.status_var = tk.StringVar(value="● 未开始")
+        self.cost_var = tk.StringVar(value="")
+
+        status_bar = tk.Frame(self.root, bg=BG_COLOR)
+        status_bar.pack(fill="x", padx=20, pady=(0, 10))
+
         self.status = tk.Label(
-            self.root,
-            textvariable=self.status_var,
-            font=self.status_font,
-            fg="#777777",
-            bg=BG_COLOR,
-            anchor="w",
+            status_bar, textvariable=self.status_var, font=self.status_font,
+            fg="#777777", bg=BG_COLOR, anchor="w",
         )
-        self.status.pack(fill="x", padx=20, pady=(0, 10))
+        self.status.pack(side="left", fill="x", expand=True)
+
+        self.cost_label = tk.Label(
+            status_bar, textvariable=self.cost_var, font=self.status_font,
+            fg="#8ab4a0", bg=BG_COLOR, anchor="e",
+        )
+        self.cost_label.pack(side="right")
 
         # === Watermark (bottom-right, faded) ===
-        # Created BEFORE the grip so the grip stays on top visually.
         if self._logo_watermark:
-            self.watermark = tk.Label(
-                self.root, image=self._logo_watermark, bg=BG_COLOR, bd=0,
-            )
+            self.watermark = tk.Label(self.root, image=self._logo_watermark, bg=BG_COLOR, bd=0)
             self.watermark.place(relx=1.0, rely=1.0, anchor="se", x=-12, y=-40)
         else:
             self.watermark = None
 
         # === Resize grip (bottom-right corner) ===
         self.grip = tk.Label(
-            self.root,
-            text="◢",
-            font=self.grip_font,
-            fg="#666666",
-            bg=BG_COLOR,
-            cursor="bottom_right_corner",
+            self.root, text="◢", font=self.grip_font,
+            fg="#666666", bg=BG_COLOR, cursor="bottom_right_corner",
         )
         self.grip.place(relx=1.0, rely=1.0, anchor="se", x=-4, y=-2)
         self.grip.bind("<ButtonPress-1>", self._on_grip_press)
@@ -201,7 +185,7 @@ class SubtitleWindow:
         self.grip.bind("<Leave>", lambda e: self.grip.configure(fg="#666666"))
 
         # Drag-to-move on everything except grip and traffic-light buttons.
-        for w in (self.root, self.content, self.status):
+        for w in (self.root, self.content, self.status, status_bar, self.cost_label):
             w.bind("<ButtonPress-1>", self._on_press)
             w.bind("<B1-Motion>", self._on_drag)
 
@@ -243,10 +227,8 @@ class SubtitleWindow:
 
     def _on_grip_press(self, event):
         self._resize_origin = (
-            event.x_root,
-            event.y_root,
-            self.root.winfo_width(),
-            self.root.winfo_height(),
+            event.x_root, event.y_root,
+            self.root.winfo_width(), self.root.winfo_height(),
         )
         return "break"
 
@@ -336,6 +318,9 @@ class SubtitleWindow:
 
     def set_status(self, text):
         self.status_var.set(f"{text}   ⌘T 透明度  ⌘M 最小化  ⌘Q 退出")
+
+    def set_cost(self, text):
+        self.cost_var.set(text)
 
     def after(self, ms, callback):
         return self.root.after(ms, callback)
