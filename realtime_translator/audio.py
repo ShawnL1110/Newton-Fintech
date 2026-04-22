@@ -30,7 +30,7 @@ class AudioCapture:
             if needle in dev["name"].lower() and dev["max_input_channels"] > 0:
                 return i, dev
         raise RuntimeError(
-            f"找不到名为 '{name}' 的输入设备。请先安装 BlackHole,"
+            f"找不到名为 '{name}' 的输入设备。请先安装 BlackHole，"
             "并在「音频 MIDI 设置」中创建 Multi-Output Device。"
         )
 
@@ -109,7 +109,6 @@ class Segmenter:
             elif buffered >= self.max_samples and has_speech:
                 emit = True
             elif buffered >= self.max_samples:
-                # drop long silence, avoid unbounded buffer
                 buffer.clear()
                 buffered = 0
                 silence_run = 0
@@ -125,3 +124,78 @@ class Segmenter:
 
     def stop(self):
         self._stop.set()
+
+
+class SpeakerClusterer:
+    """Online speaker clustering using Resemblyzer voice embeddings.
+
+    For each audio segment, extract a 256-dim embedding and match it against
+    known speaker centroids via cosine similarity. If the best match is above
+    ``similarity_threshold`` it's the same speaker (centroid updated by running
+    average); otherwise a new speaker slot is created, up to ``max_speakers``.
+
+    Segments shorter than ~1s cannot produce a reliable embedding; they are
+    attributed to the most recently active speaker (or speaker 0 if none yet).
+    """
+
+    def __init__(self, samplerate, similarity_threshold=0.75, max_speakers=8):
+        from resemblyzer import VoiceEncoder, preprocess_wav  # heavy imports
+
+        self._preprocess_wav = preprocess_wav
+        self._encoder = VoiceEncoder(verbose=False)
+        self.samplerate = samplerate
+        self.threshold = similarity_threshold
+        self.max_speakers = max_speakers
+
+        self._centroids = []
+        self._counts = []
+        self._last_speaker = 0
+
+    def _fallback(self):
+        return self._last_speaker if self._centroids else 0
+
+    def assign(self, audio_float32):
+        if len(audio_float32) < int(self.samplerate * 1.0):
+            return self._fallback()
+
+        try:
+            wav = self._preprocess_wav(audio_float32, source_sr=self.samplerate)
+        except Exception:
+            return self._fallback()
+
+        if wav is None or len(wav) < 16000:
+            return self._fallback()
+
+        try:
+            embed = self._encoder.embed_utterance(wav)
+        except Exception:
+            return self._fallback()
+
+        if not self._centroids:
+            self._centroids.append(embed)
+            self._counts.append(1)
+            self._last_speaker = 0
+            return 0
+
+        def cos(a, b):
+            return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-9))
+
+        sims = [cos(c, embed) for c in self._centroids]
+        best_idx = int(np.argmax(sims))
+
+        if sims[best_idx] >= self.threshold:
+            n = self._counts[best_idx]
+            self._centroids[best_idx] = (self._centroids[best_idx] * n + embed) / (n + 1)
+            self._counts[best_idx] = n + 1
+            self._last_speaker = best_idx
+            return best_idx
+
+        if len(self._centroids) < self.max_speakers:
+            self._centroids.append(embed)
+            self._counts.append(1)
+            new_idx = len(self._centroids) - 1
+            self._last_speaker = new_idx
+            return new_idx
+
+        self._last_speaker = best_idx
+        return best_idx

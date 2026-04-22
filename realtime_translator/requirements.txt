@@ -1,3 +1,5 @@
 openai>=1.40.0
 sounddevice>=0.4.6
 numpy>=1.24.0
+resemblyzer>=0.1.1
+librosa>=0.10.0

@@ -3,17 +3,17 @@
 Setup (macOS):
     1. Install BlackHole 2ch:
            brew install --cask blackhole-2ch
-    2. Open «音频 MIDI 设置» (Audio MIDI Setup) →
-       Create a Multi-Output Device containing both your speakers/headphones
-       AND BlackHole 2ch. Set that Multi-Output Device as system output so you
-       can still hear the audio while we capture it.
+    2. Open «Audio MIDI Setup» → create a Multi-Output Device containing both
+       your speakers/headphones AND BlackHole 2ch. Set it as system output so
+       you still hear the audio while it's captured.
     3. pip install -r requirements.txt
     4. export OPENAI_API_KEY=sk-...
     5. python -m realtime_translator.main
 
 Options:
-    --device NAME   substring of input device name (default: BlackHole)
-    --list-devices  print available input devices and exit
+    --device NAME       substring of input device name (default: BlackHole)
+    --list-devices      print available input devices and exit
+    --no-diarization    disable speaker identification
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ import sys
 import threading
 import traceback
 
-from .audio import AudioCapture, Segmenter
+from .audio import AudioCapture, Segmenter, SpeakerClusterer
 from .openai_client import Translator
 from .ui import SubtitleWindow
 
@@ -36,6 +36,7 @@ def parse_args():
     p.add_argument("--list-devices", action="store_true", help="列出可用的输入设备并退出")
     p.add_argument("--transcribe-model", default="gpt-4o-mini-transcribe")
     p.add_argument("--translate-model", default="gpt-4o-mini")
+    p.add_argument("--no-diarization", action="store_true", help="关闭说话人区分")
     return p.parse_args()
 
 
@@ -69,6 +70,16 @@ def main():
         transcribe_model=args.transcribe_model,
         translate_model=args.translate_model,
     )
+
+    clusterer = None
+    if not args.no_diarization:
+        try:
+            clusterer = SpeakerClusterer(samplerate=capture.samplerate)
+        except Exception:
+            traceback.print_exc()
+            print("说话人识别初始化失败，回退到单一说话人模式", file=sys.stderr)
+            clusterer = None
+
     window = SubtitleWindow()
     window.set_status(f"● 监听中 · {capture.device_info['name']} @ {capture.samplerate}Hz")
 
@@ -83,12 +94,12 @@ def main():
             if segment is None:
                 break
             try:
+                speaker_id = clusterer.assign(segment) if clusterer else 0
                 text = translator.transcribe(segment)
                 if not text:
                     continue
                 zh = translator.translate(text)
-                if zh:
-                    result_queue.put(zh)
+                result_queue.put((speaker_id, text, zh or ""))
             except Exception:
                 traceback.print_exc()
 
@@ -96,7 +107,8 @@ def main():
         drained = False
         try:
             while True:
-                window.append_line(result_queue.get_nowait())
+                speaker_id, original, translation = result_queue.get_nowait()
+                window.append_line(speaker_id, original, translation)
                 drained = True
         except queue.Empty:
             pass
