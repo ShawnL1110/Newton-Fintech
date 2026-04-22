@@ -1,3 +1,4 @@
+import random
 import tkinter as tk
 from pathlib import Path
 from tkinter import font as tkfont
@@ -25,13 +26,6 @@ BG_COLOR = "#0a0a0a"
 
 
 def _load_logo(size, alpha=1.0, bg_rgb=(10, 10, 10)):
-    """Load logo.png, resize to ``size`` px, optionally fade onto the BG color.
-
-    Fading by pre-compositing onto the window background color is required
-    because Tk Label widgets don't render per-pixel alpha transparency —
-    they paint a solid bg behind the image. For a watermark effect we blend
-    the logo against the known dark bg before handing it to Tk.
-    """
     if not _PIL_OK or not LOGO_PATH.exists():
         return None
     try:
@@ -48,6 +42,99 @@ def _load_logo(size, alpha=1.0, bg_rgb=(10, 10, 10)):
         return None
 
 
+class WaveformWidget:
+    """A row of bars that pulse with an externally-supplied audio level.
+
+    The caller sets a ``level_provider`` (callable returning float ≈0..0.5)
+    and the widget polls it every ``tick_ms`` to drive bar heights.
+    Each bar has its own decay + random jitter so the animation looks
+    organic rather than equalizer-like.
+    """
+
+    BAR_COUNT = 10
+    BAR_WIDTH = 3
+    BAR_GAP = 3
+    MAX_HEIGHT = 14
+    MIN_HEIGHT = 2
+    # Teal → green gradient to match the logo's bubble colors.
+    COLORS = [
+        "#4ec9b0", "#52c9b4", "#56c9b8", "#5ac9bc", "#5ec9bf",
+        "#52cfb8", "#46d5b0", "#50db9e", "#5ae18c", "#65e17a",
+    ]
+
+    def __init__(self, parent, tick_ms=50, bg=BG_COLOR):
+        self.tick_ms = tick_ms
+        total_w = self.BAR_COUNT * (self.BAR_WIDTH + self.BAR_GAP) - self.BAR_GAP
+        total_h = self.MAX_HEIGHT + 4
+        self.canvas = tk.Canvas(
+            parent, width=total_w, height=total_h,
+            bg=bg, bd=0, highlightthickness=0,
+        )
+        self._heights = [float(self.MIN_HEIGHT)] * self.BAR_COUNT
+        self._bars = []
+        center_y = total_h / 2
+        for i in range(self.BAR_COUNT):
+            x = i * (self.BAR_WIDTH + self.BAR_GAP)
+            h = self._heights[i]
+            bar = self.canvas.create_rectangle(
+                x, center_y - h / 2, x + self.BAR_WIDTH, center_y + h / 2,
+                fill=self.COLORS[i % len(self.COLORS)], outline="",
+            )
+            self._bars.append((bar, x, center_y))
+        self._level_provider = lambda: 0.0
+        self._rng = random.Random(42)
+        self._animating = False
+
+    def pack(self, **kw):
+        self.canvas.pack(**kw)
+
+    def bind(self, seq, handler):
+        self.canvas.bind(seq, handler)
+
+    def set_level_provider(self, provider):
+        self._level_provider = provider
+
+    def start(self):
+        if not self._animating:
+            self._animating = True
+            self._tick()
+
+    def stop(self):
+        self._animating = False
+
+    def _tick(self):
+        if not self._animating:
+            return
+        try:
+            level = float(self._level_provider() or 0.0)
+        except Exception:
+            level = 0.0
+
+        # Typical speech RMS is ~0.02..0.2; scale so it uses the full range.
+        scaled = min(1.0, level * 6.0)
+        range_h = self.MAX_HEIGHT - self.MIN_HEIGHT
+
+        for i, (bar_id, x, cy) in enumerate(self._bars):
+            # Per-bar jitter makes bars rise to different peaks each tick.
+            jitter = 0.45 + self._rng.random() * 0.55
+            target = self.MIN_HEIGHT + scaled * jitter * range_h
+            new_h = max(target, self._heights[i] * 0.82)
+            if new_h < self.MIN_HEIGHT:
+                new_h = self.MIN_HEIGHT
+            self._heights[i] = new_h
+            try:
+                self.canvas.coords(
+                    bar_id, x, cy - new_h / 2, x + self.BAR_WIDTH, cy + new_h / 2,
+                )
+            except tk.TclError:
+                return  # widget destroyed
+
+        try:
+            self.canvas.after(self.tick_ms, self._tick)
+        except tk.TclError:
+            pass
+
+
 class SubtitleWindow:
     """Frameless, translucent, always-on-top subtitle window."""
 
@@ -57,8 +144,8 @@ class SubtitleWindow:
 
     def __init__(self, max_lines=4):
         self.max_lines = max_lines
-        self._entries = []  # list of (speaker_id, original, translation)
-        self._alpha_index = 1  # default 0.8
+        self._entries = []
+        self._alpha_index = 1
         self._close_callback = None
         self._maximized = False
         self._minimized = False
@@ -91,7 +178,7 @@ class SubtitleWindow:
         self._logo_small = _load_logo(22)
         self._logo_watermark = _load_logo(90, alpha=0.18)
 
-        # === Top bar: traffic lights on the left, small logo on the right ===
+        # === Top bar: [traffic lights] [waveform] ... [logo] ===
         top_bar = tk.Frame(self.root, bg=BG_COLOR)
         top_bar.pack(fill="x", padx=12, pady=(8, 0))
 
@@ -126,6 +213,12 @@ class SubtitleWindow:
         self.controls.bind("<ButtonPress-1>", self._on_press)
         self.controls.bind("<B1-Motion>", self._on_drag)
 
+        # Waveform between traffic lights and logo.
+        self.waveform = WaveformWidget(top_bar)
+        self.waveform.pack(side="left", padx=(16, 0))
+        self.waveform.bind("<ButtonPress-1>", self._on_press)
+        self.waveform.bind("<B1-Motion>", self._on_drag)
+
         if self._logo_small:
             self.logo_label = tk.Label(top_bar, image=self._logo_small, bg=BG_COLOR, bd=0)
             self.logo_label.pack(side="right", padx=(0, 2))
@@ -147,7 +240,7 @@ class SubtitleWindow:
             self.content.tag_configure(f"speaker_{i}", font=self.speaker_font, foreground=color)
         self.content.configure(state="disabled")
 
-        # === Status bar: status text (left) + session cost (right) ===
+        # === Status bar ===
         self.status_var = tk.StringVar(value="● 未开始")
         self.cost_var = tk.StringVar(value="")
 
@@ -166,14 +259,14 @@ class SubtitleWindow:
         )
         self.cost_label.pack(side="right")
 
-        # === Watermark (bottom-right, faded) ===
+        # === Watermark ===
         if self._logo_watermark:
             self.watermark = tk.Label(self.root, image=self._logo_watermark, bg=BG_COLOR, bd=0)
             self.watermark.place(relx=1.0, rely=1.0, anchor="se", x=-12, y=-40)
         else:
             self.watermark = None
 
-        # === Resize grip (bottom-right corner) ===
+        # === Resize grip ===
         self.grip = tk.Label(
             self.root, text="◢", font=self.grip_font,
             fg="#666666", bg=BG_COLOR, cursor="bottom_right_corner",
@@ -184,7 +277,6 @@ class SubtitleWindow:
         self.grip.bind("<Enter>", lambda e: self.grip.configure(fg="#cccccc"))
         self.grip.bind("<Leave>", lambda e: self.grip.configure(fg="#666666"))
 
-        # Drag-to-move on everything except grip and traffic-light buttons.
         for w in (self.root, self.content, self.status, status_bar, self.cost_label):
             w.bind("<ButtonPress-1>", self._on_press)
             w.bind("<B1-Motion>", self._on_drag)
@@ -198,6 +290,7 @@ class SubtitleWindow:
         self.root.bind_all("<Escape>", lambda e: self._quit())
 
         self.root.after(50, self._force_focus)
+        self.waveform.start()
 
     def _force_focus(self):
         try:
@@ -322,6 +415,9 @@ class SubtitleWindow:
     def set_cost(self, text):
         self.cost_var.set(text)
 
+    def set_level_provider(self, provider):
+        self.waveform.set_level_provider(provider)
+
     def after(self, ms, callback):
         return self.root.after(ms, callback)
 
@@ -333,6 +429,10 @@ class SubtitleWindow:
         self.root.mainloop()
 
     def destroy(self):
+        try:
+            self.waveform.stop()
+        except Exception:
+            pass
         try:
             self.root.destroy()
         except tk.TclError:
