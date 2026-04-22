@@ -1,5 +1,7 @@
 import random
+import time
 import tkinter as tk
+from datetime import datetime
 from pathlib import Path
 from tkinter import font as tkfont
 
@@ -42,21 +44,23 @@ def _load_logo(size, alpha=1.0, bg_rgb=(10, 10, 10)):
         return None
 
 
-class WaveformWidget:
-    """A row of bars that pulse with an externally-supplied audio level.
+def _format_duration(seconds):
+    seconds = max(0, int(seconds))
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    if h > 0:
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
 
-    The caller sets a ``level_provider`` (callable returning float ≈0..0.5)
-    and the widget polls it every ``tick_ms`` to drive bar heights.
-    Each bar has its own decay + random jitter so the animation looks
-    organic rather than equalizer-like.
-    """
+
+class WaveformWidget:
+    """A row of bars that pulse with an externally-supplied audio level."""
 
     BAR_COUNT = 10
     BAR_WIDTH = 3
     BAR_GAP = 3
     MAX_HEIGHT = 14
     MIN_HEIGHT = 2
-    # Teal → green gradient to match the logo's bubble colors.
     COLORS = [
         "#4ec9b0", "#52c9b4", "#56c9b8", "#5ac9bc", "#5ec9bf",
         "#52cfb8", "#46d5b0", "#50db9e", "#5ae18c", "#65e17a",
@@ -109,13 +113,10 @@ class WaveformWidget:
             level = float(self._level_provider() or 0.0)
         except Exception:
             level = 0.0
-
-        # Typical speech RMS is ~0.02..0.2; scale so it uses the full range.
         scaled = min(1.0, level * 6.0)
         range_h = self.MAX_HEIGHT - self.MIN_HEIGHT
 
         for i, (bar_id, x, cy) in enumerate(self._bars):
-            # Per-bar jitter makes bars rise to different peaks each tick.
             jitter = 0.45 + self._rng.random() * 0.55
             target = self.MIN_HEIGHT + scaled * jitter * range_h
             new_h = max(target, self._heights[i] * 0.82)
@@ -127,7 +128,7 @@ class WaveformWidget:
                     bar_id, x, cy - new_h / 2, x + self.BAR_WIDTH, cy + new_h / 2,
                 )
             except tk.TclError:
-                return  # widget destroyed
+                return
 
         try:
             self.canvas.after(self.tick_ms, self._tick)
@@ -144,7 +145,11 @@ class SubtitleWindow:
 
     def __init__(self, max_lines=4):
         self.max_lines = max_lines
+        # Full transcript: list of (timestamp, speaker_id, original, translation).
+        # _render only shows the last ``max_lines`` on screen; the rest is kept
+        # for export.
         self._entries = []
+        self._session_start = time.time()
         self._alpha_index = 1
         self._close_callback = None
         self._maximized = False
@@ -173,12 +178,13 @@ class SubtitleWindow:
         self.zh_font = tkfont.Font(family=family, size=22, weight="bold")
         self.speaker_font = tkfont.Font(family=family, size=22, weight="bold")
         self.status_font = tkfont.Font(family=family, size=11)
+        self.button_font = tkfont.Font(family=family, size=13)
         self.grip_font = tkfont.Font(family=family, size=13)
 
         self._logo_small = _load_logo(22)
         self._logo_watermark = _load_logo(90, alpha=0.18)
 
-        # === Top bar: [traffic lights] [waveform] ... [logo] ===
+        # === Top bar ===
         top_bar = tk.Frame(self.root, bg=BG_COLOR)
         top_bar.pack(fill="x", padx=12, pady=(8, 0))
 
@@ -213,7 +219,6 @@ class SubtitleWindow:
         self.controls.bind("<ButtonPress-1>", self._on_press)
         self.controls.bind("<B1-Motion>", self._on_drag)
 
-        # Waveform between traffic lights and logo.
         self.waveform = WaveformWidget(top_bar)
         self.waveform.pack(side="left", padx=(16, 0))
         self.waveform.bind("<ButtonPress-1>", self._on_press)
@@ -240,7 +245,7 @@ class SubtitleWindow:
             self.content.tag_configure(f"speaker_{i}", font=self.speaker_font, foreground=color)
         self.content.configure(state="disabled")
 
-        # === Status bar ===
+        # === Status bar: [status ─ expand ─] [💾] [$cost] ===
         self.status_var = tk.StringVar(value="● 未开始")
         self.cost_var = tk.StringVar(value="")
 
@@ -253,11 +258,21 @@ class SubtitleWindow:
         )
         self.status.pack(side="left", fill="x", expand=True)
 
+        # Pack the cost label first (rightmost), then the save button sits to its left.
         self.cost_label = tk.Label(
             status_bar, textvariable=self.cost_var, font=self.status_font,
             fg="#8ab4a0", bg=BG_COLOR, anchor="e",
         )
         self.cost_label.pack(side="right")
+
+        self.save_button = tk.Label(
+            status_bar, text="💾", font=self.button_font,
+            fg="#888888", bg=BG_COLOR, cursor="hand2",
+        )
+        self.save_button.pack(side="right", padx=(0, 10))
+        self.save_button.bind("<Button-1>", lambda e: self.save_history())
+        self.save_button.bind("<Enter>", lambda e: self.save_button.configure(fg="#ffffff"))
+        self.save_button.bind("<Leave>", lambda e: self.save_button.configure(fg="#888888"))
 
         # === Watermark ===
         if self._logo_watermark:
@@ -287,6 +302,8 @@ class SubtitleWindow:
         self.root.bind_all("<Command-Q>", lambda e: self._quit())
         self.root.bind_all("<Command-m>", lambda e: self._on_min_btn(None))
         self.root.bind_all("<Command-M>", lambda e: self._on_min_btn(None))
+        self.root.bind_all("<Command-s>", lambda e: self.save_history())
+        self.root.bind_all("<Command-S>", lambda e: self.save_history())
         self.root.bind_all("<Escape>", lambda e: self._quit())
 
         self.root.after(50, self._force_focus)
@@ -388,15 +405,14 @@ class SubtitleWindow:
         translation = (translation or "").strip()
         if not original and not translation:
             return
-        self._entries.append((speaker_id, original, translation))
-        if len(self._entries) > self.max_lines:
-            self._entries = self._entries[-self.max_lines:]
+        self._entries.append((time.time(), speaker_id, original, translation))
         self._render()
 
     def _render(self):
         self.content.configure(state="normal")
         self.content.delete("1.0", "end")
-        for idx, (speaker_id, original, translation) in enumerate(self._entries):
+        recent = self._entries[-self.max_lines:]
+        for idx, (_ts, speaker_id, original, translation) in enumerate(recent):
             color_tag = f"speaker_{speaker_id % len(SPEAKER_COLORS)}"
             label = chr(ord("A") + speaker_id % 26)
             self.content.insert("end", f"[{label}] ", color_tag)
@@ -404,19 +420,85 @@ class SubtitleWindow:
                 self.content.insert("end", f"{original}\n", "orig")
             if translation:
                 self.content.insert("end", f"    {translation}", "zh")
-            if idx < len(self._entries) - 1:
+            if idx < len(recent) - 1:
                 self.content.insert("end", "\n\n")
         self.content.configure(state="disabled")
         self.content.see("end")
 
     def set_status(self, text):
-        self.status_var.set(f"{text}   ⌘T 透明度  ⌘M 最小化  ⌘Q 退出")
+        self.status_var.set(f"{text}   ⌘T 透明度  ⌘M 最小化  ⌘S 导出  ⌘Q 退出")
 
     def set_cost(self, text):
         self.cost_var.set(text)
 
     def set_level_provider(self, provider):
         self.waveform.set_level_provider(provider)
+
+    # ---- history export ----
+
+    def save_history(self):
+        from tkinter import filedialog, messagebox
+        if not self._entries:
+            messagebox.showinfo("导出字幕", "还没有字幕内容可以导出。")
+            return
+        default_name = time.strftime("字幕记录-%Y%m%d-%H%M%S.md")
+        path = filedialog.asksaveasfilename(
+            defaultextension=".md",
+            initialfile=default_name,
+            filetypes=[("Markdown", "*.md"), ("纯文本", "*.txt"), ("所有文件", "*.*")],
+            title="导出字幕记录",
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(self._build_markdown())
+        except Exception as e:
+            messagebox.showerror("导出失败", str(e))
+            return
+        # Visual confirmation without a modal: button flashes green.
+        self.save_button.configure(text="✓", fg="#50fa7b")
+        self.save_button.after(
+            2000,
+            lambda: self.save_button.configure(text="💾", fg="#888888"),
+        )
+
+    def _build_markdown(self):
+        lines = []
+        start = self._session_start
+        first_ts = self._entries[0][0]
+        last_ts = self._entries[-1][0]
+        speakers = sorted({e[1] for e in self._entries})
+
+        lines.append("# 实时字幕记录")
+        lines.append("")
+        lines.append(f"- **开始时间**: {datetime.fromtimestamp(start).strftime('%Y-%m-%d %H:%M:%S')}")
+        lines.append(f"- **时长**: {_format_duration(last_ts - start)}")
+        lines.append(f"- **说话人数**: {len(speakers)}")
+        lines.append(f"- **条数**: {len(self._entries)}")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+        for ts, speaker_id, original, translation in self._entries:
+            rel = ts - start
+            label = chr(ord("A") + speaker_id % 26)
+            lines.append(f"## [{_format_duration(rel)}] · 说话人 {label}")
+            lines.append("")
+            if original:
+                lines.append(f"**{original}**")
+                lines.append("")
+            if translation:
+                lines.append(f"> {translation}")
+                lines.append("")
+
+        lines.append("---")
+        lines.append("")
+        lines.append("*由「实时中文字幕」生成*")
+        lines.append("")
+        return "\n".join(lines)
+
+    # ---- lifecycle ----
 
     def after(self, ms, callback):
         return self.root.after(ms, callback)
