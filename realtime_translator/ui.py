@@ -26,13 +26,15 @@ class SubtitleWindow:
         self._entries = []  # list of (speaker_id, original, translation)
         self._alpha_index = 1  # default 0.8
         self._close_callback = None
+        self._maximized = False
+        self._saved_geometry = None
 
         self.root = tk.Tk()
         self.root.title("实时中文字幕")
         self.root.attributes("-topmost", True)
         self.root.attributes("-alpha", self.ALPHA_LEVELS[self._alpha_index])
         self.root.configure(bg="#0a0a0a")
-        self.root.geometry("960x240+120+120")
+        self.root.geometry("960x260+120+120")
         self.root.minsize(self.MIN_WIDTH, self.MIN_HEIGHT)
 
         # macOS-native frameless window that still receives keyboard events.
@@ -52,6 +54,44 @@ class SubtitleWindow:
         self.status_font = tkfont.Font(family=family, size=11)
         self.grip_font = tkfont.Font(family=family, size=13)
 
+        # Traffic-light controls (close / min / max) at top-left.
+        self.controls = tk.Canvas(
+            self.root,
+            width=64,
+            height=18,
+            bg="#0a0a0a",
+            bd=0,
+            highlightthickness=0,
+        )
+        self.controls.pack(anchor="w", padx=12, pady=(8, 0))
+
+        btn_size = 14
+        gap = 8
+        self._btn_close = self.controls.create_oval(
+            0, 2, btn_size, btn_size + 2, fill="#ff5f57", outline=""
+        )
+        self._btn_min = self.controls.create_oval(
+            btn_size + gap, 2, btn_size * 2 + gap, btn_size + 2,
+            fill="#febc2e", outline="",
+        )
+        self._btn_max = self.controls.create_oval(
+            btn_size * 2 + gap * 2, 2, btn_size * 3 + gap * 2, btn_size + 2,
+            fill="#28c840", outline="",
+        )
+        for item, handler in (
+            (self._btn_close, self._on_close_btn),
+            (self._btn_min, self._on_min_btn),
+            (self._btn_max, self._on_max_btn),
+        ):
+            self.controls.tag_bind(item, "<Button-1>", handler)
+            self.controls.tag_bind(item, "<Enter>",
+                                   lambda e: self.controls.configure(cursor="hand2"))
+            self.controls.tag_bind(item, "<Leave>",
+                                   lambda e: self.controls.configure(cursor=""))
+        # Allow dragging the window by grabbing empty canvas space.
+        self.controls.bind("<ButtonPress-1>", self._on_press)
+        self.controls.bind("<B1-Motion>", self._on_drag)
+
         self.content = tk.Text(
             self.root,
             bg="#0a0a0a",
@@ -60,7 +100,7 @@ class SubtitleWindow:
             highlightthickness=0,
             wrap="word",
             padx=20,
-            pady=12,
+            pady=6,
             cursor="hand2",
         )
         self.content.pack(fill="both", expand=True)
@@ -98,7 +138,7 @@ class SubtitleWindow:
         self.grip.bind("<Enter>", lambda e: self.grip.configure(fg="#cccccc"))
         self.grip.bind("<Leave>", lambda e: self.grip.configure(fg="#666666"))
 
-        # Drag-to-move on everything EXCEPT the grip.
+        # Drag-to-move on everything EXCEPT grip and traffic-light buttons.
         for w in (self.root, self.content, self.status):
             w.bind("<ButtonPress-1>", self._on_press)
             w.bind("<B1-Motion>", self._on_drag)
@@ -107,6 +147,8 @@ class SubtitleWindow:
         self.root.bind_all("<Command-T>", lambda e: self._cycle_alpha())
         self.root.bind_all("<Command-q>", lambda e: self._quit())
         self.root.bind_all("<Command-Q>", lambda e: self._quit())
+        self.root.bind_all("<Command-m>", lambda e: self._on_min_btn(None))
+        self.root.bind_all("<Command-M>", lambda e: self._on_min_btn(None))
         self.root.bind_all("<Escape>", lambda e: self._quit())
 
         self.root.after(50, self._force_focus)
@@ -159,6 +201,46 @@ class SubtitleWindow:
         self._alpha_index = (self._alpha_index + 1) % len(self.ALPHA_LEVELS)
         self.root.attributes("-alpha", self.ALPHA_LEVELS[self._alpha_index])
 
+    def _on_close_btn(self, event):
+        self._quit()
+        return "break"
+
+    def _on_min_btn(self, event):
+        # Shrink to a compact strip showing only the traffic-light row.
+        # Click the yellow button again (or anywhere on the strip) to restore.
+        if self._maximized:
+            self._on_max_btn(None)  # un-maximize first
+        if not getattr(self, "_minimized", False):
+            self._pre_min_geometry = self.root.geometry()
+            cur_w = self.root.winfo_width()
+            self.root.geometry(f"{min(cur_w, 260)}x30")
+            self._minimized = True
+        else:
+            self.root.geometry(self._pre_min_geometry)
+            self._minimized = False
+        return "break"
+
+    def _on_max_btn(self, event):
+        if getattr(self, "_minimized", False):
+            # restore from minimized first
+            self.root.geometry(self._pre_min_geometry)
+            self._minimized = False
+        if not self._maximized:
+            self._saved_geometry = self.root.geometry()
+            sw = self.root.winfo_screenwidth()
+            sh = self.root.winfo_screenheight()
+            new_w = int(sw * 0.85)
+            new_h = int(sh * 0.35)
+            new_x = (sw - new_w) // 2
+            new_y = sh - new_h - 120
+            self.root.geometry(f"{new_w}x{new_h}+{new_x}+{new_y}")
+            self._maximized = True
+        else:
+            if self._saved_geometry:
+                self.root.geometry(self._saved_geometry)
+            self._maximized = False
+        return "break"
+
     def _quit(self):
         if self._close_callback:
             self._close_callback()
@@ -192,7 +274,7 @@ class SubtitleWindow:
         self.content.see("end")
 
     def set_status(self, text):
-        self.status_var.set(f"{text}   ⌘T 透明度  ⌘Q 退出  拖拽移动  右下角◢调尺寸")
+        self.status_var.set(f"{text}   ⌘T 透明度  ⌘M 最小化  ⌘Q 退出")
 
     def after(self, ms, callback):
         return self.root.after(ms, callback)
