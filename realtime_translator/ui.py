@@ -18,6 +18,8 @@ class SubtitleWindow:
     """Frameless, translucent, always-on-top subtitle window."""
 
     ALPHA_LEVELS = (0.5, 0.8, 1.0)
+    MIN_WIDTH = 400
+    MIN_HEIGHT = 140
 
     def __init__(self, max_lines=4):
         self.max_lines = max_lines
@@ -31,7 +33,7 @@ class SubtitleWindow:
         self.root.attributes("-alpha", self.ALPHA_LEVELS[self._alpha_index])
         self.root.configure(bg="#0a0a0a")
         self.root.geometry("960x240+120+120")
-        self.root.minsize(400, 140)
+        self.root.minsize(self.MIN_WIDTH, self.MIN_HEIGHT)
 
         # macOS-native frameless window that still receives keyboard events.
         # Falls back to overrideredirect on other platforms.
@@ -48,6 +50,7 @@ class SubtitleWindow:
         self.zh_font = tkfont.Font(family=family, size=22, weight="bold")
         self.speaker_font = tkfont.Font(family=family, size=22, weight="bold")
         self.status_font = tkfont.Font(family=family, size=11)
+        self.grip_font = tkfont.Font(family=family, size=13)
 
         self.content = tk.Text(
             self.root,
@@ -80,6 +83,22 @@ class SubtitleWindow:
         )
         self.status.pack(fill="x", padx=20, pady=(0, 10))
 
+        # Resize grip at bottom-right corner.
+        self.grip = tk.Label(
+            self.root,
+            text="◢",
+            font=self.grip_font,
+            fg="#666666",
+            bg="#0a0a0a",
+            cursor="bottom_right_corner",
+        )
+        self.grip.place(relx=1.0, rely=1.0, anchor="se", x=-4, y=-2)
+        self.grip.bind("<ButtonPress-1>", self._on_grip_press)
+        self.grip.bind("<B1-Motion>", self._on_grip_drag)
+        self.grip.bind("<Enter>", lambda e: self.grip.configure(fg="#cccccc"))
+        self.grip.bind("<Leave>", lambda e: self.grip.configure(fg="#666666"))
+
+        # Drag-to-move on everything EXCEPT the grip.
         for w in (self.root, self.content, self.status):
             w.bind("<ButtonPress-1>", self._on_press)
             w.bind("<B1-Motion>", self._on_drag)
@@ -118,6 +137,24 @@ class SubtitleWindow:
         y = event.y_root - self._drag_origin[1]
         self.root.geometry(f"+{x}+{y}")
 
+    def _on_grip_press(self, event):
+        self._resize_origin = (
+            event.x_root,
+            event.y_root,
+            self.root.winfo_width(),
+            self.root.winfo_height(),
+        )
+        return "break"
+
+    def _on_grip_drag(self, event):
+        start_x, start_y, start_w, start_h = self._resize_origin
+        dw = event.x_root - start_x
+        dh = event.y_root - start_y
+        new_w = max(self.MIN_WIDTH, start_w + dw)
+        new_h = max(self.MIN_HEIGHT, start_h + dh)
+        self.root.geometry(f"{new_w}x{new_h}")
+        return "break"
+
     def _cycle_alpha(self):
         self._alpha_index = (self._alpha_index + 1) % len(self.ALPHA_LEVELS)
         self.root.attributes("-alpha", self.ALPHA_LEVELS[self._alpha_index])
@@ -155,7 +192,7 @@ class SubtitleWindow:
         self.content.see("end")
 
     def set_status(self, text):
-        self.status_var.set(f"{text}   ⌘T 透明度  ⌘Q 退出  拖拽移动")
+        self.status_var.set(f"{text}   ⌘T 透明度  ⌘Q 退出  拖拽移动  右下角◢调尺寸")
 
     def after(self, ms, callback):
         return self.root.after(ms, callback)
