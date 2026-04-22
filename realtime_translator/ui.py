@@ -186,7 +186,6 @@ class SubtitleWindow:
         self.grip_font = tkfont.Font(family=family, size=13)
 
         self._logo_small = _load_logo(22)
-        self._logo_watermark = _load_logo(90, alpha=0.18)
 
         # === Top bar ===
         top_bar = tk.Frame(self.root, bg=BG_COLOR)
@@ -263,8 +262,6 @@ class SubtitleWindow:
         )
         self.status.pack(side="left", fill="x", expand=True)
 
-        # Pack order matters: first side="right" widget is rightmost,
-        # subsequent ones stack to its left.
         self.cost_label = tk.Label(
             status_bar, textvariable=self.cost_var, font=self.status_font,
             fg="#8ab4a0", bg=BG_COLOR, anchor="e",
@@ -288,13 +285,6 @@ class SubtitleWindow:
         self.gear_button.bind("<Button-1>", self._show_engine_menu)
         self.gear_button.bind("<Enter>", lambda e: self.gear_button.configure(fg="#ffffff"))
         self.gear_button.bind("<Leave>", lambda e: self.gear_button.configure(fg="#888888"))
-
-        # === Watermark ===
-        if self._logo_watermark:
-            self.watermark = tk.Label(self.root, image=self._logo_watermark, bg=BG_COLOR, bd=0)
-            self.watermark.place(relx=1.0, rely=1.0, anchor="se", x=-12, y=-40)
-        else:
-            self.watermark = None
 
         # === Resize grip ===
         self.grip = tk.Label(
@@ -452,11 +442,9 @@ class SubtitleWindow:
     # ---- engine switcher ----
 
     def set_engine_change_callback(self, fn):
-        """main.py registers a function that takes the new engine id."""
         self._engine_change_callback = fn
 
     def set_current_engine(self, engine):
-        """Update the gear menu's radio selection; does NOT invoke callback."""
         self._engine_var.set(engine)
 
     def _show_engine_menu(self, event=None):
