@@ -6,16 +6,12 @@ Setup (macOS):
        set as system output.
     3. pip install -r requirements.txt
     4. export OPENAI_API_KEY=sk-...
-    5. python -m realtime_translator.main  [--engine realtime]
+    5. python -m realtime_translator.main  [--engine {batch,realtime,mixed}]
 
-Options:
-    --device NAME           input device name substring (default: BlackHole)
-    --list-devices          print available input devices and exit
-    --engine ENGINE         batch | realtime  (default: batch)
-    --transcribe-model M    default gpt-4o-mini-transcribe
-    --translate-model M     default gpt-4o-mini  (batch only)
-    --realtime-model M      default gpt-4o-mini-realtime-preview
-    --no-diarization        disable speaker identification
+Engines:
+    batch     — OpenAI transcribe + OpenAI translate (default, 稳健)
+    realtime  — OpenAI Realtime API (streaming, 低延迟, 较贵)
+    mixed     — 本地 faster-whisper 转写 + OpenAI 翻译 (几乎免费)
 """
 
 from __future__ import annotations
@@ -32,15 +28,24 @@ from .openai_client import CostTracker, Translator
 from .ui import SubtitleWindow
 
 
+ENGINE_LABELS = {
+    "batch": "OpenAI",
+    "realtime": "Realtime",
+    "mixed": "Mixed (本地+OpenAI)",
+}
+
+
 def parse_args():
     p = argparse.ArgumentParser(description="实时把电脑播放的音频翻译成中文")
     p.add_argument("--device", default="BlackHole", help="输入设备名称的子串 (默认 BlackHole)")
     p.add_argument("--list-devices", action="store_true", help="列出可用的输入设备并退出")
-    p.add_argument("--engine", choices=["batch", "realtime"], default="batch",
-                   help="batch=Whisper+翻译 (稳健);  realtime=Realtime API (低延迟)")
+    p.add_argument("--engine", choices=["batch", "realtime", "mixed"], default="batch",
+                   help="batch=OpenAI; realtime=Realtime API; mixed=本地转写+OpenAI翻译")
     p.add_argument("--transcribe-model", default="gpt-4o-mini-transcribe")
     p.add_argument("--translate-model", default="gpt-4o-mini")
     p.add_argument("--realtime-model", default="gpt-4o-mini-realtime-preview")
+    p.add_argument("--whisper-model", default="small",
+                   help="本地 Whisper 模型大小: tiny|base|small|medium|large-v3 (默认 small)")
     p.add_argument("--no-diarization", action="store_true", help="关闭说话人区分")
     return p.parse_args()
 
@@ -53,7 +58,8 @@ def main():
             print(f"[{idx}] {name}  (in={ch})")
         return
 
-    if not os.environ.get("OPENAI_API_KEY"):
+    needs_openai = args.engine in ("batch", "realtime", "mixed")
+    if needs_openai and not os.environ.get("OPENAI_API_KEY"):
         print("错误: 请先设置环境变量 OPENAI_API_KEY", file=sys.stderr)
         sys.exit(1)
 
@@ -83,18 +89,12 @@ def main():
 
     window = SubtitleWindow()
     window.set_level_provider(lambda: capture.current_level)
-    mode_text = "Realtime" if args.engine == "realtime" else "Batch"
-    window.set_status(
-        f"● 监听中 · {mode_text} · {capture.device_info['name']} @ {capture.samplerate}Hz"
-    )
-    window.set_cost("$0.0000")
-
-    stop_event = threading.Event()
 
     # Engine-specific objects
     translator = None
     rt_client = None
     rt_audio_q = None
+    local_whisper = None
 
     if args.engine == "batch":
         translator = Translator(
@@ -103,7 +103,7 @@ def main():
             translate_model=args.translate_model,
             cost_tracker=cost,
         )
-    else:  # realtime
+    elif args.engine == "realtime":
         try:
             from .realtime_client import RealtimeClient
         except ImportError as e:
@@ -117,6 +117,31 @@ def main():
         )
         rt_audio_q = queue.Queue()
         capture.add_listener(rt_audio_q)
+    elif args.engine == "mixed":
+        try:
+            from .local_whisper import LocalWhisperTranscriber
+        except ImportError as e:
+            print(f"错误: 无法加载本地 Whisper: {e}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            local_whisper = LocalWhisperTranscriber(model_size=args.whisper_model)
+        except RuntimeError as e:
+            print(f"错误: {e}", file=sys.stderr)
+            sys.exit(1)
+        translator = Translator(
+            samplerate=capture.samplerate,
+            transcribe_model=args.transcribe_model,  # unused in mixed
+            translate_model=args.translate_model,
+            cost_tracker=cost,
+        )
+
+    mode_label = ENGINE_LABELS.get(args.engine, args.engine)
+    window.set_status(
+        f"● 监听中 · {mode_label} · {capture.device_info['name']} @ {capture.samplerate}Hz"
+    )
+    window.set_cost("$0.0000")
+
+    stop_event = threading.Event()
 
     # ---- worker functions ----
 
@@ -131,6 +156,25 @@ def main():
             try:
                 speaker_id = clusterer.assign(segment) if clusterer else 0
                 text = translator.transcribe(segment)
+                if not text:
+                    continue
+                zh = translator.translate(text)
+                result_queue.put((speaker_id, text, zh or ""))
+            except Exception:
+                traceback.print_exc()
+
+    def mixed_processing_worker():
+        """Local transcribe + OpenAI translate."""
+        while not stop_event.is_set():
+            try:
+                segment = segment_queue.get(timeout=0.2)
+            except queue.Empty:
+                continue
+            if segment is None:
+                break
+            try:
+                speaker_id = clusterer.assign(segment) if clusterer else 0
+                text = local_whisper.transcribe(segment, capture.samplerate)
                 if not text:
                     continue
                 zh = translator.translate(text)
@@ -154,7 +198,6 @@ def main():
                     traceback.print_exc()
 
     def realtime_audio_bridge():
-        """Forward audio chunks from the capture listener queue to RealtimeClient."""
         while not stop_event.is_set():
             try:
                 chunk = rt_audio_q.get(timeout=0.2)
@@ -166,15 +209,7 @@ def main():
 
     def poll_results():
         drained = False
-        if args.engine == "batch":
-            try:
-                while True:
-                    speaker_id, original, translation = result_queue.get_nowait()
-                    window.append_line(speaker_id, original, translation)
-                    drained = True
-            except queue.Empty:
-                pass
-        else:
+        if args.engine == "realtime":
             try:
                 while True:
                     original, translation = rt_client.result_queue.get_nowait()
@@ -183,6 +218,14 @@ def main():
                         drained = False
                         continue
                     speaker_id = clusterer.last_speaker if clusterer else 0
+                    window.append_line(speaker_id, original, translation)
+                    drained = True
+            except queue.Empty:
+                pass
+        else:  # batch or mixed
+            try:
+                while True:
+                    speaker_id, original, translation = result_queue.get_nowait()
                     window.append_line(speaker_id, original, translation)
                     drained = True
             except queue.Empty:
@@ -217,7 +260,9 @@ def main():
     threading.Thread(target=segmenter.run, daemon=True).start()
     if args.engine == "batch":
         threading.Thread(target=batch_processing_worker, daemon=True).start()
-    else:
+    elif args.engine == "mixed":
+        threading.Thread(target=mixed_processing_worker, daemon=True).start()
+    elif args.engine == "realtime":
         threading.Thread(target=diarization_worker, daemon=True).start()
         threading.Thread(target=realtime_audio_bridge, daemon=True).start()
         rt_client.start(wait_for_ready=False)
