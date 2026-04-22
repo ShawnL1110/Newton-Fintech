@@ -5,46 +5,55 @@ import numpy as np
 from openai import OpenAI
 
 
-# Approximate OpenAI pricing (USD). Update as pricing changes.
-# Transcribe models are billed per minute of audio; chat models per 1k tokens.
+# OpenAI pricing (USD). Keys follow uniform per-unit naming so the tracker
+# can multiply amount * rate without per-model branching.
+#   audio_minute  = $ per minute of audio (transcribe endpoints)
+#   audio_1k_in   = $ per 1k audio tokens (realtime input)
+#   text_1k_in    = $ per 1k text input tokens
+#   text_1k_out   = $ per 1k text output tokens
 MODEL_PRICING = {
-    "gpt-4o-mini-transcribe": {"audio_per_minute": 0.003},
-    "gpt-4o-transcribe":      {"audio_per_minute": 0.006},
-    "whisper-1":              {"audio_per_minute": 0.006},
-    "gpt-4o-mini":            {"input_per_1k": 0.00015, "output_per_1k": 0.0006},
-    "gpt-4o":                 {"input_per_1k": 0.0025,  "output_per_1k": 0.01},
+    "gpt-4o-mini-transcribe":       {"audio_minute": 0.003},
+    "gpt-4o-transcribe":            {"audio_minute": 0.006},
+    "whisper-1":                    {"audio_minute": 0.006},
+    "gpt-4o-mini":                  {"text_1k_in": 0.00015, "text_1k_out": 0.0006},
+    "gpt-4o":                       {"text_1k_in": 0.0025,  "text_1k_out": 0.01},
+    "gpt-4o-realtime-preview":      {"audio_1k_in": 0.040,  "text_1k_in": 0.005,    "text_1k_out": 0.020},
+    "gpt-4o-mini-realtime-preview": {"audio_1k_in": 0.010,  "text_1k_in": 0.00060,  "text_1k_out": 0.00240},
 }
 
 
 class CostTracker:
-    """Accumulates OpenAI API usage across a session and estimates spend."""
+    """Accumulates OpenAI API usage across a session and estimates spend.
+
+    Each recorded datum is tagged with its model so a single session can
+    mix batch transcribe + chat translate and realtime streaming.
+    """
 
     def __init__(self):
-        self.audio_seconds = 0.0
-        self.input_tokens = 0
-        self.output_tokens = 0
-        self._transcribe_model = None
-        self._chat_model = None
+        self._entries = []  # list of (model, kind, amount)
 
-    def add_audio(self, seconds, model):
-        self.audio_seconds += seconds
-        self._transcribe_model = model
+    def _add(self, model, kind, amount):
+        if amount:
+            self._entries.append((model, kind, amount))
 
-    def add_chat(self, input_tokens, output_tokens, model):
-        self.input_tokens += input_tokens
-        self.output_tokens += output_tokens
-        self._chat_model = model
+    def add_audio_seconds(self, seconds, model):
+        """Transcribe endpoints bill per minute of audio."""
+        self._add(model, "audio_minute", seconds / 60.0)
+
+    def add_audio_tokens(self, tokens, model):
+        """Realtime API bills audio input per 1k tokens."""
+        self._add(model, "audio_1k_in", tokens / 1000.0)
+
+    def add_text_tokens(self, input_tokens, output_tokens, model):
+        self._add(model, "text_1k_in", input_tokens / 1000.0)
+        self._add(model, "text_1k_out", output_tokens / 1000.0)
 
     @property
     def total_usd(self):
         total = 0.0
-        if self._transcribe_model:
-            p = MODEL_PRICING.get(self._transcribe_model, {})
-            total += (self.audio_seconds / 60.0) * p.get("audio_per_minute", 0.0)
-        if self._chat_model:
-            p = MODEL_PRICING.get(self._chat_model, {})
-            total += (self.input_tokens / 1000.0) * p.get("input_per_1k", 0.0)
-            total += (self.output_tokens / 1000.0) * p.get("output_per_1k", 0.0)
+        for model, kind, amount in self._entries:
+            rate = MODEL_PRICING.get(model, {}).get(kind, 0.0)
+            total += amount * rate
         return total
 
 
@@ -86,7 +95,7 @@ class Translator:
             model=self.transcribe_model,
             file=wav,
         )
-        self.cost.add_audio(duration_sec, self.transcribe_model)
+        self.cost.add_audio_seconds(duration_sec, self.transcribe_model)
         return (resp.text or "").strip()
 
     def translate(self, text):
@@ -111,7 +120,7 @@ class Translator:
             ],
         )
         if getattr(resp, "usage", None):
-            self.cost.add_chat(
+            self.cost.add_text_tokens(
                 getattr(resp.usage, "prompt_tokens", 0) or 0,
                 getattr(resp.usage, "completion_tokens", 0) or 0,
                 self.translate_model,
