@@ -6,7 +6,11 @@ import sounddevice as sd
 
 
 class AudioCapture:
-    """Captures system audio from a loopback device (e.g. BlackHole on macOS)."""
+    """Captures system audio from a loopback device (e.g. BlackHole on macOS).
+
+    Supports multiple consumers: every captured chunk is fanned out to
+    ``self.queue`` plus any extra queues registered via ``add_listener``.
+    """
 
     def __init__(self, device_name="BlackHole", chunk_duration=0.1, out_queue=None):
         self.device_index, self.device_info = self._find_device(device_name)
@@ -14,7 +18,12 @@ class AudioCapture:
         self.channels = min(int(self.device_info["max_input_channels"]), 2) or 1
         self.chunk_samples = int(self.samplerate * chunk_duration)
         self.queue = out_queue if out_queue is not None else queue.Queue()
+        self._listeners = [self.queue]
         self.stream = None
+
+    def add_listener(self, q):
+        """Register an additional queue to receive every captured chunk."""
+        self._listeners.append(q)
 
     @staticmethod
     def list_input_devices():
@@ -39,7 +48,9 @@ class AudioCapture:
             mono = indata.mean(axis=1)
         else:
             mono = indata[:, 0] if indata.ndim == 2 else indata
-        self.queue.put(mono.astype(np.float32).copy())
+        chunk = mono.astype(np.float32).copy()
+        for q in self._listeners:
+            q.put(chunk)
 
     def start(self):
         self.stream = sd.InputStream(
@@ -150,6 +161,10 @@ class SpeakerClusterer:
         self._centroids = []
         self._counts = []
         self._last_speaker = 0
+
+    @property
+    def last_speaker(self):
+        return self._last_speaker
 
     def _fallback(self):
         return self._last_speaker if self._centroids else 0
