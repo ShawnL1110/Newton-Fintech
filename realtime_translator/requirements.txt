@@ -1,6 +1,8 @@
-openai>=1.40.0
+openai>=1.50.0
 sounddevice>=0.4.6
 numpy>=1.24.0
 resemblyzer>=0.1.1
 librosa>=0.10.0
+scipy>=1.11.0
 Pillow>=10.0.0
+websockets>=12.0
