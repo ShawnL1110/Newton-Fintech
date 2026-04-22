@@ -9,7 +9,9 @@ class AudioCapture:
     """Captures system audio from a loopback device (e.g. BlackHole on macOS).
 
     Supports multiple consumers: every captured chunk is fanned out to
-    ``self.queue`` plus any extra queues registered via ``add_listener``.
+    ``self.queue`` plus any extra queues registered via ``add_listener``
+    / ``remove_listener``. Mutation is lock-guarded so the audio callback
+    and the main thread can co-exist safely.
 
     Also exposes ``current_level`` — an EMA-smoothed RMS of the latest
     chunks (0..~0.7 for most speech) that UIs can poll at display rate
@@ -23,12 +25,22 @@ class AudioCapture:
         self.chunk_samples = int(self.samplerate * chunk_duration)
         self.queue = out_queue if out_queue is not None else queue.Queue()
         self._listeners = [self.queue]
+        self._listeners_lock = threading.Lock()
         self.current_level = 0.0
         self.stream = None
 
     def add_listener(self, q):
         """Register an additional queue to receive every captured chunk."""
-        self._listeners.append(q)
+        with self._listeners_lock:
+            self._listeners.append(q)
+
+    def remove_listener(self, q):
+        """Unregister a previously-added listener queue (no-op if missing)."""
+        with self._listeners_lock:
+            try:
+                self._listeners.remove(q)
+            except ValueError:
+                pass
 
     @staticmethod
     def list_input_devices():
@@ -59,7 +71,9 @@ class AudioCapture:
         rms = float(np.sqrt(np.mean(chunk * chunk))) if len(chunk) else 0.0
         self.current_level = self.current_level * 0.6 + rms * 0.4
 
-        for q in self._listeners:
+        with self._listeners_lock:
+            listeners = list(self._listeners)
+        for q in listeners:
             q.put(chunk)
 
     def start(self):
