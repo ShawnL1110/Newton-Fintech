@@ -8,7 +8,7 @@ Setup (macOS):
     4. export OPENAI_API_KEY=sk-...
     5. python -m realtime_translator.main  [--engine {batch,realtime,mixed}]
 
-Engines:
+Engines (also switchable at runtime via the ⚙ button in the status bar):
     batch     — OpenAI transcribe + OpenAI translate (default, 稳健)
     realtime  — OpenAI Realtime API (streaming, 低延迟, 较贵)
     mixed     — 本地 faster-whisper 转写 + OpenAI 翻译 (几乎免费)
@@ -88,9 +88,7 @@ def main():
     window = SubtitleWindow()
     window.set_level_provider(lambda: capture.current_level)
 
-    # Mutable holder so poll_results + the engine-change callback both see
-    # the current pipeline across hot-swaps.
-    state = {"pipeline": None, "engine": args.engine}
+    state = {"pipeline": None, "engine": args.engine, "switching": False}
 
     def set_engine_status():
         label = ENGINE_LABELS.get(state["engine"], state["engine"])
@@ -98,8 +96,8 @@ def main():
             f"● 监听中 · {label} · {capture.device_info['name']} @ {capture.samplerate}Hz"
         )
 
-    def start_pipeline(engine):
-        pipeline = EnginePipeline(
+    def build_pipeline(engine):
+        p = EnginePipeline(
             engine=engine,
             capture=capture,
             segment_queue=segment_queue,
@@ -107,29 +105,84 @@ def main():
             cost=cost,
             args=args,
         )
-        pipeline.start()
-        return pipeline
+        p.start()
+        return p
 
-    state["pipeline"] = start_pipeline(args.engine)
+    def on_engine_change(new_engine):
+        """Called from the UI thread when user picks a mode in the ⚙ menu."""
+        if state["switching"] or new_engine == state["engine"]:
+            window.set_current_engine(state["engine"])
+            return
+
+        state["switching"] = True
+        label = ENGINE_LABELS.get(new_engine, new_engine)
+        window.set_status(f"● 切换到 {label}…")
+
+        # The heavy lifting (esp. loading faster-whisper) blocks for seconds,
+        # so do it off the UI thread. Re-sync state from the UI thread via
+        # window.after(0, ...).
+        def do_switch():
+            previous_engine = state["engine"]
+            previous_pipeline = state["pipeline"]
+            state["pipeline"] = None  # poll loop will skip until new one is ready
+
+            if previous_pipeline is not None:
+                try:
+                    previous_pipeline.stop()
+                except Exception:
+                    traceback.print_exc()
+
+            try:
+                new_pipeline = build_pipeline(new_engine)
+            except Exception as e:
+                traceback.print_exc()
+                # Fall back: restart the previous engine so the app keeps working.
+                try:
+                    restored = build_pipeline(previous_engine)
+                except Exception:
+                    traceback.print_exc()
+                    restored = None
+                def report_failure():
+                    state["pipeline"] = restored
+                    state["switching"] = False
+                    window.set_current_engine(previous_engine)
+                    window.set_status(f"● 切换失败: {e} (已恢复 {ENGINE_LABELS.get(previous_engine, previous_engine)})")
+                window.after(0, report_failure)
+                return
+
+            def commit_success():
+                state["pipeline"] = new_pipeline
+                state["engine"] = new_engine
+                state["switching"] = False
+                window.set_current_engine(new_engine)
+                set_engine_status()
+            window.after(0, commit_success)
+
+        threading.Thread(target=do_switch, daemon=True).start()
+
+    window.set_engine_change_callback(on_engine_change)
+    window.set_current_engine(args.engine)
+
+    state["pipeline"] = build_pipeline(args.engine)
     set_engine_status()
     window.set_cost("$0.0000")
 
-    # ---- poll loops ----
-
     def poll_results():
+        pipeline = state["pipeline"]
         drained = False
-        try:
-            while True:
-                speaker_id, original, translation = state["pipeline"].result_queue.get_nowait()
-                if original == ERROR_MARKER:
-                    window.set_status(f"● 错误: {translation[:80]}")
-                    drained = False
-                    continue
-                window.append_line(speaker_id or 0, original, translation)
-                drained = True
-        except queue.Empty:
-            pass
-        if drained:
+        if pipeline is not None:
+            try:
+                while True:
+                    speaker_id, original, translation = pipeline.result_queue.get_nowait()
+                    if original == ERROR_MARKER:
+                        window.set_status(f"● 错误: {translation[:80]}")
+                        drained = False
+                        continue
+                    window.append_line(speaker_id or 0, original, translation)
+                    drained = True
+            except queue.Empty:
+                pass
+        if drained and not state["switching"]:
             set_engine_status()
         window.after(120, poll_results)
 
