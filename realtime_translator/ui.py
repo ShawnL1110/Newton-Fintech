@@ -59,6 +59,31 @@ def _format_duration(seconds):
     return f"{m:02d}:{s:02d}"
 
 
+def _elevate_ns_window_level():
+    """Best-effort: raise our NSWindow above fullscreen-space windows.
+
+    Only works when pyobjc-framework-Cocoa is available. Without it the
+    window still floats above regular apps (via topmost) but macOS will
+    hide it when another app enters fullscreen.
+    """
+    try:
+        from AppKit import NSApp
+        # NSFloatingWindowLevel + small bump so it sits above most status
+        # items and above the macOS fullscreen "Space" layer.
+        level = 9  # NSPopUpMenuWindowLevel
+        for window in NSApp.windows():
+            try:
+                window.setLevel_(level)
+                window.setCollectionBehavior_(
+                    1 << 0   # NSWindowCollectionBehaviorCanJoinAllSpaces
+                    | 1 << 8  # NSWindowCollectionBehaviorFullScreenAuxiliary
+                )
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 class WaveformWidget:
     """A row of bars that pulse with an externally-supplied audio level."""
 
@@ -169,13 +194,15 @@ class SubtitleWindow:
         self.root.geometry("960x260+120+120")
         self.root.minsize(self.MIN_WIDTH, self.MIN_HEIGHT)
 
-        try:
-            self.root.tk.call(
-                "::tk::unsupported::MacWindowStyle", "style",
-                self.root._w, "plain", "none",
-            )
-        except tk.TclError:
-            self.root.overrideredirect(True)
+        # Remove all native chrome (title bar, borders). On macOS this is
+        # the only reliable way to get a truly frameless overlay; Tk's
+        # MacWindowStyle hook still leaves the title bar in practice.
+        self.root.overrideredirect(True)
+
+        # After overrideredirect, try to elevate the NSWindow level so the
+        # window can overlay macOS fullscreen apps (karaoke/lyrics style).
+        # Needs pyobjc; no-op if it isn't installed.
+        self.root.after(100, _elevate_ns_window_level)
 
         family = self._pick_font_family()
         self.orig_font = tkfont.Font(family=family, size=15)
