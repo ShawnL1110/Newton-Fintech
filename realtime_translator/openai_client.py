@@ -69,5 +69,12 @@ class Translator:
     def _already_chinese(text):
         if not text:
             return False
+        # Japanese (hiragana/katakana) or Korean (hangul) → not Chinese, translate it.
+        # Japanese kanji overlap with CJK ideographs, so presence of kana is the reliable signal.
+        for c in text:
+            if "぀" <= c <= "ヿ":
+                return False
+            if "가" <= c <= "힯":
+                return False
         chinese = sum(1 for c in text if "一" <= c <= "鿿")
         return chinese / len(text) > 0.5
