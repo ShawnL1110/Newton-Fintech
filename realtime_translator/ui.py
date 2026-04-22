@@ -1,5 +1,12 @@
 import tkinter as tk
+from pathlib import Path
 from tkinter import font as tkfont
+
+try:
+    from PIL import Image, ImageTk
+    _PIL_OK = True
+except Exception:
+    _PIL_OK = False
 
 
 SPEAKER_COLORS = [
@@ -12,6 +19,33 @@ SPEAKER_COLORS = [
     "#f1fa8c",  # yellow
     "#ff5555",  # red
 ]
+
+LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo.png"
+BG_COLOR = "#0a0a0a"
+
+
+def _load_logo(size, alpha=1.0, bg_rgb=(10, 10, 10)):
+    """Load logo.png, resize to ``size`` px, optionally fade onto the BG color.
+
+    Fading by pre-compositing onto the window background color is required
+    because Tk Label widgets don't render per-pixel alpha transparency —
+    they paint a solid bg behind the image. For a watermark effect we blend
+    the logo against the known dark bg before handing it to Tk.
+    """
+    if not _PIL_OK or not LOGO_PATH.exists():
+        return None
+    try:
+        img = Image.open(LOGO_PATH).convert("RGBA")
+        img.thumbnail((size, size), Image.LANCZOS)
+        if alpha < 1.0:
+            r, g, b, a = img.split()
+            faded_alpha = a.point(lambda x: int(x * alpha))
+            bg = Image.new("RGBA", img.size, bg_rgb + (255,))
+            img.putalpha(faded_alpha)
+            img = Image.alpha_composite(bg, img)
+        return ImageTk.PhotoImage(img)
+    except Exception:
+        return None
 
 
 class SubtitleWindow:
@@ -27,18 +61,18 @@ class SubtitleWindow:
         self._alpha_index = 1  # default 0.8
         self._close_callback = None
         self._maximized = False
+        self._minimized = False
         self._saved_geometry = None
+        self._pre_min_geometry = None
 
         self.root = tk.Tk()
         self.root.title("实时中文字幕")
         self.root.attributes("-topmost", True)
         self.root.attributes("-alpha", self.ALPHA_LEVELS[self._alpha_index])
-        self.root.configure(bg="#0a0a0a")
+        self.root.configure(bg=BG_COLOR)
         self.root.geometry("960x260+120+120")
         self.root.minsize(self.MIN_WIDTH, self.MIN_HEIGHT)
 
-        # macOS-native frameless window that still receives keyboard events.
-        # Falls back to overrideredirect on other platforms.
         try:
             self.root.tk.call(
                 "::tk::unsupported::MacWindowStyle", "style",
@@ -54,16 +88,24 @@ class SubtitleWindow:
         self.status_font = tkfont.Font(family=family, size=11)
         self.grip_font = tkfont.Font(family=family, size=13)
 
-        # Traffic-light controls (close / min / max) at top-left.
+        # Pre-load logo at the sizes we need. Hold references so the images
+        # survive garbage collection.
+        self._logo_small = _load_logo(22)
+        self._logo_watermark = _load_logo(90, alpha=0.18)
+
+        # === Top bar: traffic lights on the left, small logo on the right ===
+        top_bar = tk.Frame(self.root, bg=BG_COLOR)
+        top_bar.pack(fill="x", padx=12, pady=(8, 0))
+
         self.controls = tk.Canvas(
-            self.root,
+            top_bar,
             width=64,
             height=18,
-            bg="#0a0a0a",
+            bg=BG_COLOR,
             bd=0,
             highlightthickness=0,
         )
-        self.controls.pack(anchor="w", padx=12, pady=(8, 0))
+        self.controls.pack(side="left")
 
         btn_size = 14
         gap = 8
@@ -88,13 +130,23 @@ class SubtitleWindow:
                                    lambda e: self.controls.configure(cursor="hand2"))
             self.controls.tag_bind(item, "<Leave>",
                                    lambda e: self.controls.configure(cursor=""))
-        # Allow dragging the window by grabbing empty canvas space.
         self.controls.bind("<ButtonPress-1>", self._on_press)
         self.controls.bind("<B1-Motion>", self._on_drag)
 
+        if self._logo_small:
+            self.logo_label = tk.Label(
+                top_bar, image=self._logo_small, bg=BG_COLOR, bd=0,
+            )
+            self.logo_label.pack(side="right", padx=(0, 2))
+            self.logo_label.bind("<ButtonPress-1>", self._on_press)
+            self.logo_label.bind("<B1-Motion>", self._on_drag)
+        else:
+            self.logo_label = None
+
+        # === Main content ===
         self.content = tk.Text(
             self.root,
-            bg="#0a0a0a",
+            bg=BG_COLOR,
             fg="#ffffff",
             bd=0,
             highlightthickness=0,
@@ -109,27 +161,37 @@ class SubtitleWindow:
         self.content.tag_configure("zh", font=self.zh_font, foreground="#ffffff")
         for i, color in enumerate(SPEAKER_COLORS):
             self.content.tag_configure(f"speaker_{i}", font=self.speaker_font, foreground=color)
-
         self.content.configure(state="disabled")
 
+        # === Status bar ===
         self.status_var = tk.StringVar(value="● 未开始")
         self.status = tk.Label(
             self.root,
             textvariable=self.status_var,
             font=self.status_font,
             fg="#777777",
-            bg="#0a0a0a",
+            bg=BG_COLOR,
             anchor="w",
         )
         self.status.pack(fill="x", padx=20, pady=(0, 10))
 
-        # Resize grip at bottom-right corner.
+        # === Watermark (bottom-right, faded) ===
+        # Created BEFORE the grip so the grip stays on top visually.
+        if self._logo_watermark:
+            self.watermark = tk.Label(
+                self.root, image=self._logo_watermark, bg=BG_COLOR, bd=0,
+            )
+            self.watermark.place(relx=1.0, rely=1.0, anchor="se", x=-12, y=-40)
+        else:
+            self.watermark = None
+
+        # === Resize grip (bottom-right corner) ===
         self.grip = tk.Label(
             self.root,
             text="◢",
             font=self.grip_font,
             fg="#666666",
-            bg="#0a0a0a",
+            bg=BG_COLOR,
             cursor="bottom_right_corner",
         )
         self.grip.place(relx=1.0, rely=1.0, anchor="se", x=-4, y=-2)
@@ -138,7 +200,7 @@ class SubtitleWindow:
         self.grip.bind("<Enter>", lambda e: self.grip.configure(fg="#cccccc"))
         self.grip.bind("<Leave>", lambda e: self.grip.configure(fg="#666666"))
 
-        # Drag-to-move on everything EXCEPT grip and traffic-light buttons.
+        # Drag-to-move on everything except grip and traffic-light buttons.
         for w in (self.root, self.content, self.status):
             w.bind("<ButtonPress-1>", self._on_press)
             w.bind("<B1-Motion>", self._on_drag)
@@ -206,24 +268,23 @@ class SubtitleWindow:
         return "break"
 
     def _on_min_btn(self, event):
-        # Shrink to a compact strip showing only the traffic-light row.
-        # Click the yellow button again (or anywhere on the strip) to restore.
         if self._maximized:
-            self._on_max_btn(None)  # un-maximize first
-        if not getattr(self, "_minimized", False):
+            self._on_max_btn(None)
+        if not self._minimized:
             self._pre_min_geometry = self.root.geometry()
             cur_w = self.root.winfo_width()
             self.root.geometry(f"{min(cur_w, 260)}x30")
             self._minimized = True
         else:
-            self.root.geometry(self._pre_min_geometry)
+            if self._pre_min_geometry:
+                self.root.geometry(self._pre_min_geometry)
             self._minimized = False
         return "break"
 
     def _on_max_btn(self, event):
-        if getattr(self, "_minimized", False):
-            # restore from minimized first
-            self.root.geometry(self._pre_min_geometry)
+        if self._minimized:
+            if self._pre_min_geometry:
+                self.root.geometry(self._pre_min_geometry)
             self._minimized = False
         if not self._maximized:
             self._saved_geometry = self.root.geometry()
