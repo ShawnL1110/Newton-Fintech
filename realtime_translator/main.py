@@ -109,7 +109,6 @@ def main():
         return p
 
     def on_engine_change(new_engine):
-        """Called from the UI thread when user picks a mode in the ⚙ menu."""
         if state["switching"] or new_engine == state["engine"]:
             window.set_current_engine(state["engine"])
             return
@@ -118,13 +117,10 @@ def main():
         label = ENGINE_LABELS.get(new_engine, new_engine)
         window.set_status(f"● 切换到 {label}…")
 
-        # The heavy lifting (esp. loading faster-whisper) blocks for seconds,
-        # so do it off the UI thread. Re-sync state from the UI thread via
-        # window.after(0, ...).
         def do_switch():
             previous_engine = state["engine"]
             previous_pipeline = state["pipeline"]
-            state["pipeline"] = None  # poll loop will skip until new one is ready
+            state["pipeline"] = None
 
             if previous_pipeline is not None:
                 try:
@@ -136,7 +132,6 @@ def main():
                 new_pipeline = build_pipeline(new_engine)
             except Exception as e:
                 traceback.print_exc()
-                # Fall back: restart the previous engine so the app keeps working.
                 try:
                     restored = build_pipeline(previous_engine)
                 except Exception:
@@ -173,12 +168,21 @@ def main():
         if pipeline is not None:
             try:
                 while True:
-                    speaker_id, original, translation = pipeline.result_queue.get_nowait()
+                    result = pipeline.result_queue.get_nowait()
+                    # Accept both the legacy 3-tuple (speaker, orig, trans)
+                    # and the streaming 4-tuple (speaker, orig, trans, is_partial).
+                    if len(result) == 4:
+                        speaker_id, original, translation, is_partial = result
+                    else:
+                        speaker_id, original, translation = result
+                        is_partial = False
                     if original == ERROR_MARKER:
                         window.set_status(f"● 错误: {translation[:80]}")
                         drained = False
                         continue
-                    window.append_line(speaker_id or 0, original, translation)
+                    window.append_line(
+                        speaker_id or 0, original, translation, is_partial=is_partial,
+                    )
                     drained = True
             except queue.Empty:
                 pass
