@@ -60,23 +60,16 @@ def _format_duration(seconds):
 
 
 def _elevate_ns_window_level():
-    """Best-effort: raise our NSWindow above fullscreen-space windows.
-
-    Only works when pyobjc-framework-Cocoa is available. Without it the
-    window still floats above regular apps (via topmost) but macOS will
-    hide it when another app enters fullscreen.
-    """
+    """Best-effort: raise our NSWindow above fullscreen-space windows."""
     try:
         from AppKit import NSApp
-        # NSFloatingWindowLevel + small bump so it sits above most status
-        # items and above the macOS fullscreen "Space" layer.
         level = 9  # NSPopUpMenuWindowLevel
         for window in NSApp.windows():
             try:
                 window.setLevel_(level)
                 window.setCollectionBehavior_(
-                    1 << 0   # NSWindowCollectionBehaviorCanJoinAllSpaces
-                    | 1 << 8  # NSWindowCollectionBehaviorFullScreenAuxiliary
+                    1 << 0
+                    | 1 << 8
                 )
             except Exception:
                 pass
@@ -176,7 +169,11 @@ class SubtitleWindow:
 
     def __init__(self, max_lines=4):
         self.max_lines = max_lines
+        # Full transcript: (timestamp, speaker_id, original, translation).
         self._entries = []
+        # When the tail entry is a streaming partial from realtime mode, the
+        # next append_line call replaces it in place instead of appending.
+        self._streaming_tail = False
         self._session_start = time.time()
         self._alpha_index = 1
         self._close_callback = None
@@ -194,14 +191,7 @@ class SubtitleWindow:
         self.root.geometry("960x260+120+120")
         self.root.minsize(self.MIN_WIDTH, self.MIN_HEIGHT)
 
-        # Remove all native chrome (title bar, borders). On macOS this is
-        # the only reliable way to get a truly frameless overlay; Tk's
-        # MacWindowStyle hook still leaves the title bar in practice.
         self.root.overrideredirect(True)
-
-        # After overrideredirect, try to elevate the NSWindow level so the
-        # window can overlay macOS fullscreen apps (karaoke/lyrics style).
-        # Needs pyobjc; no-op if it isn't installed.
         self.root.after(100, _elevate_ns_window_level)
 
         family = self._pick_font_family()
@@ -214,7 +204,6 @@ class SubtitleWindow:
 
         self._logo_small = _load_logo(22)
 
-        # === Top bar ===
         top_bar = tk.Frame(self.root, bg=BG_COLOR)
         top_bar.pack(fill="x", padx=12, pady=(8, 0))
 
@@ -262,7 +251,6 @@ class SubtitleWindow:
         else:
             self.logo_label = None
 
-        # === Main content ===
         self.content = tk.Text(
             self.root, bg=BG_COLOR, fg="#ffffff", bd=0, highlightthickness=0,
             wrap="word", padx=20, pady=6, cursor="hand2",
@@ -275,7 +263,6 @@ class SubtitleWindow:
             self.content.tag_configure(f"speaker_{i}", font=self.speaker_font, foreground=color)
         self.content.configure(state="disabled")
 
-        # === Status bar: [status ─ expand ─] [⚙] [💾] [$cost] ===
         self.status_var = tk.StringVar(value="● 未开始")
         self.cost_var = tk.StringVar(value="")
         self._engine_var = tk.StringVar(value="batch")
@@ -313,7 +300,6 @@ class SubtitleWindow:
         self.gear_button.bind("<Enter>", lambda e: self.gear_button.configure(fg="#ffffff"))
         self.gear_button.bind("<Leave>", lambda e: self.gear_button.configure(fg="#888888"))
 
-        # === Resize grip ===
         self.grip = tk.Label(
             self.root, text="◢", font=self.grip_font,
             fg="#666666", bg=BG_COLOR, cursor="bottom_right_corner",
@@ -432,12 +418,26 @@ class SubtitleWindow:
         else:
             self.destroy()
 
-    def append_line(self, speaker_id, original, translation):
+    def append_line(self, speaker_id, original, translation, is_partial=False):
+        """Append or update the transcript tail.
+
+        When ``is_partial`` is False (default), behaves as before: each call
+        adds a new entry. When True, the call is treated as a streaming
+        update — if the previous call was also partial, we *replace* the
+        last entry in place instead of appending. This gives realtime mode
+        a live growing-subtitle effect without flooding history with
+        intermediate fragments.
+        """
         original = (original or "").strip()
         translation = (translation or "").strip()
         if not original and not translation:
             return
-        self._entries.append((time.time(), speaker_id, original, translation))
+        if self._streaming_tail and self._entries:
+            prev_ts = self._entries[-1][0]
+            self._entries[-1] = (prev_ts, speaker_id, original, translation)
+        else:
+            self._entries.append((time.time(), speaker_id, original, translation))
+        self._streaming_tail = bool(is_partial)
         self._render()
 
     def _render(self):
@@ -466,8 +466,6 @@ class SubtitleWindow:
     def set_level_provider(self, provider):
         self.waveform.set_level_provider(provider)
 
-    # ---- engine switcher ----
-
     def set_engine_change_callback(self, fn):
         self._engine_change_callback = fn
 
@@ -493,8 +491,6 @@ class SubtitleWindow:
     def _on_engine_select(self, engine):
         if self._engine_change_callback:
             self._engine_change_callback(engine)
-
-    # ---- history export ----
 
     def save_history(self):
         from tkinter import filedialog, messagebox
@@ -555,8 +551,6 @@ class SubtitleWindow:
         lines.append("*由「实时中文字幕」生成*")
         lines.append("")
         return "\n".join(lines)
-
-    # ---- lifecycle ----
 
     def after(self, ms, callback):
         return self.root.after(ms, callback)
