@@ -10,6 +10,10 @@ class AudioCapture:
 
     Supports multiple consumers: every captured chunk is fanned out to
     ``self.queue`` plus any extra queues registered via ``add_listener``.
+
+    Also exposes ``current_level`` — an EMA-smoothed RMS of the latest
+    chunks (0..~0.7 for most speech) that UIs can poll at display rate
+    without having to drain the raw stream.
     """
 
     def __init__(self, device_name="BlackHole", chunk_duration=0.1, out_queue=None):
@@ -19,6 +23,7 @@ class AudioCapture:
         self.chunk_samples = int(self.samplerate * chunk_duration)
         self.queue = out_queue if out_queue is not None else queue.Queue()
         self._listeners = [self.queue]
+        self.current_level = 0.0
         self.stream = None
 
     def add_listener(self, q):
@@ -49,6 +54,11 @@ class AudioCapture:
         else:
             mono = indata[:, 0] if indata.ndim == 2 else indata
         chunk = mono.astype(np.float32).copy()
+
+        # EMA-smoothed RMS for UI polling.
+        rms = float(np.sqrt(np.mean(chunk * chunk))) if len(chunk) else 0.0
+        self.current_level = self.current_level * 0.6 + rms * 0.4
+
         for q in self._listeners:
             q.put(chunk)
 
