@@ -82,6 +82,7 @@ def main():
             clusterer = None
 
     window = SubtitleWindow()
+    window.set_level_provider(lambda: capture.current_level)
     mode_text = "Realtime" if args.engine == "realtime" else "Batch"
     window.set_status(
         f"● 监听中 · {mode_text} · {capture.device_info['name']} @ {capture.samplerate}Hz"
@@ -179,7 +180,7 @@ def main():
                     original, translation = rt_client.result_queue.get_nowait()
                     if original == "__error__":
                         window.set_status(f"● 错误: {translation[:80]}")
-                        drained = False  # keep error visible
+                        drained = False
                         continue
                     speaker_id = clusterer.last_speaker if clusterer else 0
                     window.append_line(speaker_id, original, translation)
