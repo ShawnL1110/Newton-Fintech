@@ -26,7 +26,7 @@ import threading
 import traceback
 
 from .audio import AudioCapture, Segmenter, SpeakerClusterer
-from .openai_client import Translator
+from .openai_client import CostTracker, Translator
 from .ui import SubtitleWindow
 
 
@@ -64,11 +64,13 @@ def main():
     segment_queue: queue.Queue = queue.Queue()
     result_queue: queue.Queue = queue.Queue()
 
+    cost = CostTracker()
     segmenter = Segmenter(capture.queue, segment_queue, samplerate=capture.samplerate)
     translator = Translator(
         samplerate=capture.samplerate,
         transcribe_model=args.transcribe_model,
         translate_model=args.translate_model,
+        cost_tracker=cost,
     )
 
     clusterer = None
@@ -82,6 +84,7 @@ def main():
 
     window = SubtitleWindow()
     window.set_status(f"● 监听中 · {capture.device_info['name']} @ {capture.samplerate}Hz")
+    window.set_cost("$0.0000")
 
     stop_event = threading.Event()
 
@@ -116,6 +119,13 @@ def main():
             window.set_status("● 监听中")
         window.after(120, poll_results)
 
+    def poll_cost():
+        total = cost.total_usd
+        # Show 4 decimals under $1, 2 decimals above (keeps tiny costs visible).
+        fmt = f"${total:.4f}" if total < 1 else f"${total:.2f}"
+        window.set_cost(fmt)
+        window.after(1000, poll_cost)
+
     def shutdown():
         stop_event.set()
         segmenter.stop()
@@ -135,6 +145,7 @@ def main():
     capture.start()
 
     window.after(120, poll_results)
+    window.after(1000, poll_cost)
     try:
         window.run()
     finally:
