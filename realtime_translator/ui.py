@@ -23,6 +23,12 @@ SPEAKER_COLORS = [
     "#ff5555",  # red
 ]
 
+ENGINE_MENU_LABELS = [
+    ("batch",    "OpenAI (标准)"),
+    ("realtime", "OpenAI Realtime (低延迟)"),
+    ("mixed",    "混合 (本地转写 + OpenAI 翻译)"),
+]
+
 LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo.png"
 BG_COLOR = "#0a0a0a"
 
@@ -145,13 +151,11 @@ class SubtitleWindow:
 
     def __init__(self, max_lines=4):
         self.max_lines = max_lines
-        # Full transcript: list of (timestamp, speaker_id, original, translation).
-        # _render only shows the last ``max_lines`` on screen; the rest is kept
-        # for export.
         self._entries = []
         self._session_start = time.time()
         self._alpha_index = 1
         self._close_callback = None
+        self._engine_change_callback = None
         self._maximized = False
         self._minimized = False
         self._saved_geometry = None
@@ -245,9 +249,10 @@ class SubtitleWindow:
             self.content.tag_configure(f"speaker_{i}", font=self.speaker_font, foreground=color)
         self.content.configure(state="disabled")
 
-        # === Status bar: [status ─ expand ─] [💾] [$cost] ===
+        # === Status bar: [status ─ expand ─] [⚙] [💾] [$cost] ===
         self.status_var = tk.StringVar(value="● 未开始")
         self.cost_var = tk.StringVar(value="")
+        self._engine_var = tk.StringVar(value="batch")
 
         status_bar = tk.Frame(self.root, bg=BG_COLOR)
         status_bar.pack(fill="x", padx=20, pady=(0, 10))
@@ -258,7 +263,8 @@ class SubtitleWindow:
         )
         self.status.pack(side="left", fill="x", expand=True)
 
-        # Pack the cost label first (rightmost), then the save button sits to its left.
+        # Pack order matters: first side="right" widget is rightmost,
+        # subsequent ones stack to its left.
         self.cost_label = tk.Label(
             status_bar, textvariable=self.cost_var, font=self.status_font,
             fg="#8ab4a0", bg=BG_COLOR, anchor="e",
@@ -273,6 +279,15 @@ class SubtitleWindow:
         self.save_button.bind("<Button-1>", lambda e: self.save_history())
         self.save_button.bind("<Enter>", lambda e: self.save_button.configure(fg="#ffffff"))
         self.save_button.bind("<Leave>", lambda e: self.save_button.configure(fg="#888888"))
+
+        self.gear_button = tk.Label(
+            status_bar, text="⚙", font=self.button_font,
+            fg="#888888", bg=BG_COLOR, cursor="hand2",
+        )
+        self.gear_button.pack(side="right", padx=(0, 8))
+        self.gear_button.bind("<Button-1>", self._show_engine_menu)
+        self.gear_button.bind("<Enter>", lambda e: self.gear_button.configure(fg="#ffffff"))
+        self.gear_button.bind("<Leave>", lambda e: self.gear_button.configure(fg="#888888"))
 
         # === Watermark ===
         if self._logo_watermark:
@@ -434,6 +449,36 @@ class SubtitleWindow:
     def set_level_provider(self, provider):
         self.waveform.set_level_provider(provider)
 
+    # ---- engine switcher ----
+
+    def set_engine_change_callback(self, fn):
+        """main.py registers a function that takes the new engine id."""
+        self._engine_change_callback = fn
+
+    def set_current_engine(self, engine):
+        """Update the gear menu's radio selection; does NOT invoke callback."""
+        self._engine_var.set(engine)
+
+    def _show_engine_menu(self, event=None):
+        menu = tk.Menu(self.root, tearoff=0)
+        for value, label in ENGINE_MENU_LABELS:
+            menu.add_radiobutton(
+                label=label,
+                variable=self._engine_var,
+                value=value,
+                command=lambda v=value: self._on_engine_select(v),
+            )
+        try:
+            x = self.gear_button.winfo_rootx()
+            y = self.gear_button.winfo_rooty() + self.gear_button.winfo_height() + 4
+            menu.tk_popup(x, y)
+        finally:
+            menu.grab_release()
+
+    def _on_engine_select(self, engine):
+        if self._engine_change_callback:
+            self._engine_change_callback(engine)
+
     # ---- history export ----
 
     def save_history(self):
@@ -456,7 +501,6 @@ class SubtitleWindow:
         except Exception as e:
             messagebox.showerror("导出失败", str(e))
             return
-        # Visual confirmation without a modal: button flashes green.
         self.save_button.configure(text="✓", fg="#50fa7b")
         self.save_button.after(
             2000,
@@ -466,7 +510,6 @@ class SubtitleWindow:
     def _build_markdown(self):
         lines = []
         start = self._session_start
-        first_ts = self._entries[0][0]
         last_ts = self._entries[-1][0]
         speakers = sorted({e[1] for e in self._entries})
 
