@@ -77,6 +77,13 @@ class RealtimeClient:
         self.result_queue: queue.Queue = queue.Queue()
         self._audio_in: queue.Queue = queue.Queue()
 
+        # Track peak RMS since the last commit so live mode can skip
+        # commits over silent intervals (which otherwise produce
+        # hallucinated refusals like "对不起，我无法处理这个请求"). Plain
+        # float read/write is atomic under the GIL, no lock needed.
+        self._peak_rms = 0.0
+        self._silence_threshold = 0.012
+
         self._stop = threading.Event()
         self._ready = threading.Event()
         self._thread = None
@@ -96,6 +103,10 @@ class RealtimeClient:
     def push_audio(self, audio_f32):
         if self._stop.is_set():
             return
+        if len(audio_f32):
+            rms = float(np.sqrt(np.mean(audio_f32 * audio_f32)))
+            if rms > self._peak_rms:
+                self._peak_rms = rms
         self._audio_in.put(audio_f32)
 
     # ---- asyncio machinery ----
@@ -236,9 +247,24 @@ class RealtimeClient:
         buffer and request a response. Gives true simultaneous-interpretation
         feel — translations stream out mid-sentence without waiting for the
         speaker to pause.
+
+        Skips commits when the past interval was silent so the model doesn't
+        hallucinate refusals on empty audio. Clears the buffer in that case
+        so silent samples don't accumulate forever.
         """
         while not self._stop.is_set():
             await asyncio.sleep(self.commit_interval)
+            peak = self._peak_rms
+            self._peak_rms = 0.0  # reset window for next interval
+
+            if peak < self._silence_threshold:
+                # Silent interval — drop the buffered audio; don't commit.
+                try:
+                    await conn.input_audio_buffer.clear()
+                except Exception:
+                    pass
+                continue
+
             try:
                 await conn.input_audio_buffer.commit()
                 await conn.response.create()
