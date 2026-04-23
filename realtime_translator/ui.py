@@ -90,6 +90,36 @@ def _set_ns_window_level(elevated):
         pass
 
 
+def _round_window_corners(radius=12.0):
+    """Add rounded corners to our NSWindow's content view (macOS, pyobjc).
+
+    Layer-backs the contentView and applies a corner mask. To make the
+    rounded edges actually transparent we also clear the NSWindow's own
+    background — Tk widgets keep painting their dark fill, so the visible
+    rectangle stays solid; only the outside-the-radius pixels become
+    see-through.
+    """
+    try:
+        from AppKit import NSApp, NSColor
+        for window in NSApp.windows():
+            try:
+                content_view = window.contentView()
+                if content_view is None:
+                    continue
+                content_view.setWantsLayer_(True)
+                layer = content_view.layer()
+                if layer is not None:
+                    layer.setCornerRadius_(float(radius))
+                    layer.setMasksToBounds_(True)
+                window.setOpaque_(False)
+                window.setBackgroundColor_(NSColor.clearColor())
+                window.setHasShadow_(True)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 class WaveformWidget:
     """A row of bars that pulse with an externally-supplied audio level."""
 
@@ -210,6 +240,7 @@ class SubtitleWindow:
         # Apply once on startup, then keep re-applying every few seconds in
         # case macOS resets the level when the active Space changes.
         self.root.after(100, lambda: _set_ns_window_level(self._fullscreen_overlay))
+        self.root.after(150, lambda: _round_window_corners(12.0))
         self.root.after(3000, self._reapply_window_level_loop)
 
         family = self._pick_font_family()
