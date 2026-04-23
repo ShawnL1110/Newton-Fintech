@@ -59,18 +59,31 @@ def _format_duration(seconds):
     return f"{m:02d}:{s:02d}"
 
 
-def _elevate_ns_window_level():
-    """Best-effort: raise our NSWindow above fullscreen-space windows."""
+def _set_ns_window_level(elevated):
+    """Raise/restore our NSWindow level (macOS, requires pyobjc).
+
+    Elevated uses NSScreenSaverWindowLevel (1000) — high enough to sit on
+    top of fullscreen-space apps for a karaoke / song-lyrics effect.
+    Restored uses NSNormalWindowLevel (0).
+
+    Silently no-ops when pyobjc isn't installed.
+    """
     try:
-        from AppKit import NSApp
-        level = 9  # NSPopUpMenuWindowLevel
+        from AppKit import (
+            NSApp,
+            NSNormalWindowLevel,
+            NSScreenSaverWindowLevel,
+        )
+        if elevated:
+            level = NSScreenSaverWindowLevel
+            behavior = (1 << 0) | (1 << 8)  # CanJoinAllSpaces | FullScreenAuxiliary
+        else:
+            level = NSNormalWindowLevel
+            behavior = 0
         for window in NSApp.windows():
             try:
                 window.setLevel_(level)
-                window.setCollectionBehavior_(
-                    1 << 0
-                    | 1 << 8
-                )
+                window.setCollectionBehavior_(behavior)
             except Exception:
                 pass
     except Exception:
@@ -182,6 +195,8 @@ class SubtitleWindow:
         self._minimized = False
         self._saved_geometry = None
         self._pre_min_geometry = None
+        # Overlay-above-fullscreen state (toggle via ⌘⇧F).
+        self._fullscreen_overlay = True
 
         self.root = tk.Tk()
         self.root.title("实时中文字幕")
@@ -192,7 +207,10 @@ class SubtitleWindow:
         self.root.minsize(self.MIN_WIDTH, self.MIN_HEIGHT)
 
         self.root.overrideredirect(True)
-        self.root.after(100, _elevate_ns_window_level)
+        # Apply once on startup, then keep re-applying every few seconds in
+        # case macOS resets the level when the active Space changes.
+        self.root.after(100, lambda: _set_ns_window_level(self._fullscreen_overlay))
+        self.root.after(3000, self._reapply_window_level_loop)
 
         family = self._pick_font_family()
         self.orig_font = tkfont.Font(family=family, size=15)
@@ -322,6 +340,8 @@ class SubtitleWindow:
         self.root.bind_all("<Command-M>", lambda e: self._on_min_btn(None))
         self.root.bind_all("<Command-s>", lambda e: self.save_history())
         self.root.bind_all("<Command-S>", lambda e: self.save_history())
+        self.root.bind_all("<Command-Shift-f>", lambda e: self._toggle_fullscreen_overlay())
+        self.root.bind_all("<Command-Shift-F>", lambda e: self._toggle_fullscreen_overlay())
         self.root.bind_all("<Escape>", lambda e: self._quit())
 
         self.root.after(50, self._force_focus)
@@ -333,6 +353,23 @@ class SubtitleWindow:
             self.root.focus_force()
         except tk.TclError:
             pass
+
+    def _reapply_window_level_loop(self):
+        # macOS sometimes resets window level when the active Space changes
+        # (e.g. when an app enters fullscreen). Re-applying every 3s keeps
+        # the overlay sticky.
+        if self._fullscreen_overlay:
+            _set_ns_window_level(True)
+        try:
+            self.root.after(3000, self._reapply_window_level_loop)
+        except tk.TclError:
+            pass
+
+    def _toggle_fullscreen_overlay(self):
+        self._fullscreen_overlay = not self._fullscreen_overlay
+        _set_ns_window_level(self._fullscreen_overlay)
+        msg = "✓ 浮顶已开启 (盖在全屏应用上)" if self._fullscreen_overlay else "○ 浮顶已关闭"
+        self.status_var.set(msg)
 
     @staticmethod
     def _pick_font_family():
@@ -458,7 +495,9 @@ class SubtitleWindow:
         self.content.see("end")
 
     def set_status(self, text):
-        self.status_var.set(f"{text}   ⌘T 透明度  ⌘M 最小化  ⌘S 导出  ⌘Q 退出")
+        self.status_var.set(
+            f"{text}   ⌘T 透明度  ⌘⇧F 浮顶  ⌘M 最小化  ⌘S 导出  ⌘Q 退出"
+        )
 
     def set_cost(self, text):
         self.cost_var.set(text)
