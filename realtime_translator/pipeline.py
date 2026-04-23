@@ -2,15 +2,17 @@
 
 An ``EnginePipeline`` owns all the per-engine state (API clients, model
 handles, worker threads) and exposes a unified ``result_queue`` of
-``(speaker_id, original, translation)`` tuples regardless of engine.
+``(speaker_id, original, translation, is_partial)`` tuples regardless of
+engine. ``is_partial=True`` means the tail is still streaming and the UI
+should replace the last line in place instead of appending.
 
 The capture / segmenter / clusterer / cost-tracker are *shared* across
 pipeline swaps and managed by the caller. Pipelines must never stop
 those shared components.
 
 Errors from an engine surface as
-``(None, "__error__", message)`` on the result queue so the UI layer
-can display them in the status bar without crashing.
+``(None, "__error__", message, False)`` on the result queue so the UI
+layer can display them in the status bar without crashing.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ import traceback
 
 
 ERROR_MARKER = "__error__"
+PARTIAL_MARKER = "__partial__"
 VALID_ENGINES = ("batch", "realtime", "mixed")
 
 
@@ -60,7 +63,7 @@ class EnginePipeline:
                 self._start_mixed()
         except Exception as e:
             traceback.print_exc()
-            self.result_queue.put((None, ERROR_MARKER, f"启动失败: {e}"))
+            self.result_queue.put((None, ERROR_MARKER, f"启动失败: {e}", False))
 
     def stop(self, join_timeout=3.0):
         """Tell all workers to exit and clean up engine-specific resources."""
@@ -152,7 +155,7 @@ class EnginePipeline:
                 if not text:
                     continue
                 zh = self._translator.translate(text)
-                self.result_queue.put((speaker_id, text, zh or ""))
+                self.result_queue.put((speaker_id, text, zh or "", False))
             except Exception:
                 traceback.print_exc()
 
@@ -171,7 +174,7 @@ class EnginePipeline:
                 if not text:
                     continue
                 zh = self._translator.translate(text)
-                self.result_queue.put((speaker_id, text, zh or ""))
+                self.result_queue.put((speaker_id, text, zh or "", False))
             except Exception:
                 traceback.print_exc()
 
@@ -203,17 +206,27 @@ class EnginePipeline:
                 self._rt_client.push_audio(chunk)
 
     def _rt_result_bridge(self):
-        """Forward RealtimeClient results (2-tuple) into the pipeline's
-        unified result queue (3-tuple with speaker id)."""
+        """Forward RealtimeClient events into the pipeline's unified queue.
+
+        The client emits 3-tuples where the first element is either the
+        PARTIAL_MARKER (streaming delta; keep updating the tail), the
+        ERROR_MARKER, or the original-transcription text (final result).
+        """
         while not self._stop.is_set():
             if self._rt_client is None:
                 return
             try:
-                original, translation = self._rt_client.result_queue.get(timeout=0.2)
+                first, original, translation = self._rt_client.result_queue.get(timeout=0.2)
             except queue.Empty:
                 continue
-            if original == ERROR_MARKER:
-                self.result_queue.put((None, ERROR_MARKER, translation))
+            except ValueError:
+                continue  # unexpected payload shape
+            if first == ERROR_MARKER:
+                self.result_queue.put((None, ERROR_MARKER, original, False))
                 continue
             speaker_id = self.clusterer.last_speaker if self.clusterer else 0
-            self.result_queue.put((speaker_id, original, translation))
+            if first == PARTIAL_MARKER:
+                self.result_queue.put((speaker_id, original, translation, True))
+            else:
+                # Final turn: first is the original transcription text.
+                self.result_queue.put((speaker_id, first, translation, False))

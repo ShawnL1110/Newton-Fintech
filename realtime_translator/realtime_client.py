@@ -1,8 +1,13 @@
 """OpenAI Realtime API streaming client.
 
 Connects to gpt-4o-*-realtime-preview via WebSocket (wrapped by the OpenAI
-SDK's async client), streams 24kHz PCM16 audio, and yields (original,
-translation) tuples as server-side VAD closes each speaker turn.
+SDK's async client), streams 24kHz PCM16 audio, and emits 3-tuples as
+translations come in:
+
+    ("__partial__", original, translation)   — streaming delta; consumer
+        should keep replacing the tail line in place while it grows
+    (original, "", translation)              — final result for a turn
+    ("__error__", message, "")               — error surfaced to UI
 
 Runs an asyncio event loop in its own daemon thread; audio chunks are
 accepted from any thread via push_audio() and bridged into the loop
@@ -96,13 +101,13 @@ class RealtimeClient:
             asyncio.run(self._async_main())
         except Exception as e:
             traceback.print_exc()
-            self.result_queue.put(("__error__", f"Realtime: {e}"))
+            self.result_queue.put(("__error__", f"Realtime: {e}", ""))
 
     async def _async_main(self):
         try:
             from openai import AsyncOpenAI
         except ImportError as e:
-            self.result_queue.put(("__error__", f"openai SDK missing: {e}"))
+            self.result_queue.put(("__error__", f"openai SDK missing: {e}", ""))
             return
 
         client = AsyncOpenAI()
@@ -155,7 +160,7 @@ class RealtimeClient:
                 )
         except Exception as e:
             traceback.print_exc()
-            self.result_queue.put(("__error__", f"Realtime: {e}"))
+            self.result_queue.put(("__error__", f"Realtime: {e}", ""))
 
     async def _pump_audio(self, conn, audio_q):
         while True:
@@ -168,7 +173,7 @@ class RealtimeClient:
             try:
                 await conn.input_audio_buffer.append(audio=b64)
             except Exception as e:
-                self.result_queue.put(("__error__", f"audio append: {e}"))
+                self.result_queue.put(("__error__", f"audio append: {e}", ""))
                 return
 
     async def _read_events(self, conn):
@@ -178,20 +183,30 @@ class RealtimeClient:
             et = getattr(event, "type", "")
             if et == "conversation.item.input_audio_transcription.completed":
                 current_orig = getattr(event, "transcript", "") or ""
+                # Transcription arrived; push a partial so the UI shows the
+                # original line even before translation starts streaming.
+                if current_orig:
+                    self.result_queue.put(("__partial__", current_orig, current_trans))
             elif et == "response.text.delta":
                 current_trans += getattr(event, "delta", "") or ""
+                # Stream every accumulated delta — the UI replaces the tail
+                # in place, so spam here is fine and gives the lyrics feel.
+                self.result_queue.put(("__partial__", current_orig, current_trans))
             elif et == "response.text.done":
                 current_trans = getattr(event, "text", None) or current_trans
+                self.result_queue.put(("__partial__", current_orig, current_trans))
             elif et == "response.done":
                 if current_orig or current_trans:
-                    self.result_queue.put((current_orig, current_trans))
+                    # Final form: first element is the original text so the
+                    # bridge distinguishes it from __partial__ / __error__.
+                    self.result_queue.put((current_orig, "", current_trans))
                 self._record_usage(event)
                 current_orig = ""
                 current_trans = ""
             elif et == "error":
                 err = getattr(event, "error", None)
                 msg = getattr(err, "message", None) if err else None
-                self.result_queue.put(("__error__", msg or "unknown error"))
+                self.result_queue.put(("__error__", msg or "unknown error", ""))
 
     def _record_usage(self, event):
         """Tag this turn's audio/text usage in the CostTracker."""
