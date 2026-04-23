@@ -510,10 +510,18 @@ class SubtitleWindow:
         self._render()
 
     def _render(self):
+        # Stick-to-bottom: only auto-scroll if the user was already viewing
+        # the latest content. If they scrolled up to read history, leave
+        # their position alone so live updates don't yank them back down.
+        try:
+            _, bottom_frac = self.content.yview()
+            stick_to_bottom = bottom_frac > 0.95
+        except (tk.TclError, ValueError):
+            stick_to_bottom = True
+
         self.content.configure(state="normal")
         self.content.delete("1.0", "end")
-        recent = self._entries[-self.max_lines:]
-        for idx, (_ts, speaker_id, original, translation) in enumerate(recent):
+        for idx, (_ts, speaker_id, original, translation) in enumerate(self._entries):
             color_tag = f"speaker_{speaker_id % len(SPEAKER_COLORS)}"
             label = chr(ord("A") + speaker_id % 26)
             self.content.insert("end", f"[{label}] ", color_tag)
@@ -521,10 +529,12 @@ class SubtitleWindow:
                 self.content.insert("end", f"{original}\n", "orig")
             if translation:
                 self.content.insert("end", f"    {translation}", "zh")
-            if idx < len(recent) - 1:
+            if idx < len(self._entries) - 1:
                 self.content.insert("end", "\n\n")
         self.content.configure(state="disabled")
-        self.content.see("end")
+
+        if stick_to_bottom:
+            self.content.see("end")
 
     def set_status(self, text):
         self.status_var.set(
