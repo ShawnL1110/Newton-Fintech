@@ -128,7 +128,7 @@ class EnginePipeline:
             model=self.args.realtime_model,
             transcribe_model=self.args.transcribe_model,
             live_mode=True,
-            commit_interval=1.5,
+            commit_interval=3.0,
         )
         self._rt_audio_q = queue.Queue()
         self.capture.add_listener(self._rt_audio_q)
