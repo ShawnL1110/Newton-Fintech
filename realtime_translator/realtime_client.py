@@ -62,12 +62,16 @@ class RealtimeClient:
         model="gpt-4o-mini-realtime-preview",
         transcribe_model="gpt-4o-mini-transcribe",
         target_language="Simplified Chinese",
+        live_mode=False,
+        commit_interval=1.5,
     ):
         self.samplerate = samplerate
         self.cost = cost_tracker
         self.model = model
         self.transcribe_model = transcribe_model
         self.target_language = target_language
+        self.live_mode = live_mode
+        self.commit_interval = commit_interval
 
         # Thread-safe channels used across the UI / audio / asyncio threads.
         self.result_queue: queue.Queue = queue.Queue()
@@ -132,32 +136,51 @@ class RealtimeClient:
 
         try:
             async with client.beta.realtime.connect(model=self.model) as conn:
-                await conn.session.update(session={
-                    "modalities": ["text"],
-                    "input_audio_format": "pcm16",
-                    "input_audio_transcription": {"model": self.transcribe_model},
-                    "turn_detection": {
+                if self.live_mode:
+                    # Live (同传) mode: disable server VAD, drive turns
+                    # ourselves via _commit_loop every commit_interval seconds.
+                    turn_detection = None
+                    instructions = (
+                        f"You are a live simultaneous interpreter. Translate the audio "
+                        f"fragments into natural, fluent {self.target_language} as they "
+                        "arrive. Each fragment may end mid-sentence — translate exactly "
+                        "what you've heard, even if incomplete; do NOT invent or guess "
+                        "the rest. Skip filler if there's no real content. Output ONLY "
+                        "the translation, no quotes, no pinyin, no explanations."
+                    )
+                else:
+                    turn_detection = {
                         "type": "server_vad",
                         "threshold": 0.5,
                         "prefix_padding_ms": 300,
                         "silence_duration_ms": 500,
                         "create_response": True,
-                    },
-                    "instructions": (
+                    }
+                    instructions = (
                         f"You are a simultaneous interpreter. Translate the user's "
                         f"speech into natural, fluent {self.target_language}. "
                         "The input may be a fragment of ongoing speech — translate "
                         "it as-is without adding context. Output ONLY the "
                         "translation, no quotes, no pinyin, no explanations."
-                    ),
+                    )
+
+                await conn.session.update(session={
+                    "modalities": ["text"],
+                    "input_audio_format": "pcm16",
+                    "input_audio_transcription": {"model": self.transcribe_model},
+                    "turn_detection": turn_detection,
+                    "instructions": instructions,
                 })
                 self._ready.set()
 
-                await asyncio.gather(
+                tasks = [
                     bridge_audio(),
                     self._pump_audio(conn, audio_q),
                     self._read_events(conn),
-                )
+                ]
+                if self.live_mode:
+                    tasks.append(self._commit_loop(conn))
+                await asyncio.gather(*tasks)
         except Exception as e:
             traceback.print_exc()
             self.result_queue.put(("__error__", f"Realtime: {e}", ""))
@@ -207,6 +230,25 @@ class RealtimeClient:
                 err = getattr(event, "error", None)
                 msg = getattr(err, "message", None) if err else None
                 self.result_queue.put(("__error__", msg or "unknown error", ""))
+
+    async def _commit_loop(self, conn):
+        """Live mode: every commit_interval seconds, force-commit the audio
+        buffer and request a response. Gives true simultaneous-interpretation
+        feel — translations stream out mid-sentence without waiting for the
+        speaker to pause.
+        """
+        while not self._stop.is_set():
+            await asyncio.sleep(self.commit_interval)
+            try:
+                await conn.input_audio_buffer.commit()
+                await conn.response.create()
+            except Exception as e:
+                # Empty buffer or in-flight response: harmless, skip this tick.
+                msg = str(e).lower()
+                if "buffer" in msg or "active response" in msg or "no audio" in msg:
+                    continue
+                self.result_queue.put(("__error__", f"commit: {e}", ""))
+                return
 
     def _record_usage(self, event):
         """Tag this turn's audio/text usage in the CostTracker."""

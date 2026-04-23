@@ -33,6 +33,7 @@ ENGINE_LABELS = {
     "batch": "OpenAI",
     "realtime": "Realtime",
     "mixed": "Mixed (本地+OpenAI)",
+    "live": "Live (同传)",
 }
 
 
@@ -40,8 +41,8 @@ def parse_args():
     p = argparse.ArgumentParser(description="实时把电脑播放的音频翻译成中文")
     p.add_argument("--device", default="BlackHole", help="输入设备名称的子串 (默认 BlackHole)")
     p.add_argument("--list-devices", action="store_true", help="列出可用的输入设备并退出")
-    p.add_argument("--engine", choices=["batch", "realtime", "mixed"], default="batch",
-                   help="batch=OpenAI; realtime=Realtime API; mixed=本地转写+OpenAI翻译")
+    p.add_argument("--engine", choices=["batch", "realtime", "mixed", "live"], default="batch",
+                   help="batch=OpenAI; realtime=Realtime API; mixed=本地转写+OpenAI翻译; live=同传 (~1.5s 强制 commit)")
     p.add_argument("--transcribe-model", default="gpt-4o-mini-transcribe")
     p.add_argument("--translate-model", default="gpt-4o-mini")
     p.add_argument("--realtime-model", default="gpt-4o-mini-realtime-preview")

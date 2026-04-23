@@ -24,7 +24,7 @@ import traceback
 
 ERROR_MARKER = "__error__"
 PARTIAL_MARKER = "__partial__"
-VALID_ENGINES = ("batch", "realtime", "mixed")
+VALID_ENGINES = ("batch", "realtime", "mixed", "live")
 
 
 class EnginePipeline:
@@ -61,6 +61,8 @@ class EnginePipeline:
                 self._start_realtime()
             elif self.engine == "mixed":
                 self._start_mixed()
+            elif self.engine == "live":
+                self._start_live()
         except Exception as e:
             traceback.print_exc()
             self.result_queue.put((None, ERROR_MARKER, f"启动失败: {e}", False))
@@ -112,6 +114,27 @@ class EnginePipeline:
         self.capture.add_listener(self._rt_audio_q)
 
         self._spawn(self._diarization_worker)
+        self._spawn(self._rt_audio_bridge)
+        self._spawn(self._rt_result_bridge)
+        self._rt_client.start(wait_for_ready=False)
+
+    def _start_live(self):
+        """Live (同传) mode: like realtime but with manual 1.5s commits and
+        no diarization (segments are too short for reliable speaker ID)."""
+        from .realtime_client import RealtimeClient
+        self._rt_client = RealtimeClient(
+            samplerate=self.capture.samplerate,
+            cost_tracker=self.cost,
+            model=self.args.realtime_model,
+            transcribe_model=self.args.transcribe_model,
+            live_mode=True,
+            commit_interval=1.5,
+        )
+        self._rt_audio_q = queue.Queue()
+        self.capture.add_listener(self._rt_audio_q)
+
+        # No _diarization_worker — speaker_id stays at 0 in _rt_result_bridge
+        # because we still consult clusterer.last_speaker, which never updates.
         self._spawn(self._rt_audio_bridge)
         self._spawn(self._rt_result_bridge)
         self._rt_client.start(wait_for_ready=False)
