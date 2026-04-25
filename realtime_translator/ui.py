@@ -320,6 +320,9 @@ class SubtitleWindow:
         self.status_var = tk.StringVar(value="● 未开始")
         self.cost_var = tk.StringVar(value="")
         self._engine_var = tk.StringVar(value="batch")
+        # set_status stores the bare text here; _refresh_status_display
+        # combines it with width-adaptive hotkey hints.
+        self._status_base = "● 未开始"
 
         status_bar = tk.Frame(self.root, bg=BG_COLOR)
         # Pack the status bar BEFORE the content frame, anchored to the
@@ -333,6 +336,9 @@ class SubtitleWindow:
         self.status = tk.Label(
             status_bar, textvariable=self.status_var, font=self.status_font,
             fg="#777777", bg=BG_COLOR, anchor="w",
+            # width=1 prevents the Label from claiming its full text width
+            # at preferred-size time — text just clips at the slot edge.
+            width=1,
         )
         self.status.pack(side="left", fill="x", expand=True)
 
@@ -392,6 +398,9 @@ class SubtitleWindow:
         self.root.bind_all("<Escape>", lambda e: self._quit())
 
         self.root.after(50, self._force_focus)
+        # Re-render the adaptive status hints whenever the root window
+        # changes size, so hotkey hints shrink/grow to fit.
+        self.root.bind("<Configure>", self._on_root_configure)
         self.waveform.start()
 
     def _force_focus(self):
@@ -400,6 +409,10 @@ class SubtitleWindow:
             self.root.focus_force()
         except tk.TclError:
             pass
+
+    def _on_root_configure(self, event):
+        if event.widget is self.root:
+            self._refresh_status_display()
 
     def _reapply_window_level_loop(self):
         # macOS sometimes resets window level when the active Space changes
@@ -552,9 +565,30 @@ class SubtitleWindow:
             self.content.see("end")
 
     def set_status(self, text):
-        self.status_var.set(
-            f"{text}   空格/⌘P 暂停  ⌘T 透明度  ⌘⇧F 浮顶  ⌘M 最小化  ⌘S 导出  ⌘Q 退出"
-        )
+        self._status_base = text
+        self._refresh_status_display()
+
+    def _refresh_status_display(self):
+        # Pick a hint string that fits in the current window width. Buttons
+        # (gear / save / cost) on the right edge already eat ~120px, so the
+        # status label has roughly window_width - 200 pixels to play with.
+        try:
+            width = self.root.winfo_width()
+        except tk.TclError:
+            width = 960
+        if width >= 1000:
+            hint = "  空格 暂停  ⌘T 透明度  ⌘⇧F 浮顶  ⌘M 最小化  ⌘S 导出  ⌘Q 退出"
+        elif width >= 850:
+            hint = "  空格 暂停  ⌘T 透明  ⌘⇧F 浮顶  ⌘M 最小化  ⌘S 导出"
+        elif width >= 700:
+            hint = "  空格 暂停  ⌘T 透明  ⌘⇧F 浮顶  ⌘S 导出"
+        elif width >= 560:
+            hint = "  空格 暂停  ⌘T  ⌘⇧F  ⌘S"
+        elif width >= 440:
+            hint = "  空格 暂停"
+        else:
+            hint = ""
+        self.status_var.set(f"{self._status_base}{hint}")
 
     def set_cost(self, text):
         self.cost_var.set(text)
