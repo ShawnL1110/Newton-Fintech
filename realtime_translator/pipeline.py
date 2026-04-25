@@ -42,6 +42,10 @@ class EnginePipeline:
 
         self.result_queue: queue.Queue = queue.Queue()
         self._stop = threading.Event()
+        # When paused, workers drain their input queues but skip processing,
+        # so audio capture / waveform / cost tracker keep working but no
+        # API tokens are spent.
+        self.paused = False
         self._threads = []
 
         # engine-specific state (populated during start)
@@ -66,6 +70,9 @@ class EnginePipeline:
         except Exception as e:
             traceback.print_exc()
             self.result_queue.put((None, ERROR_MARKER, f"启动失败: {e}", False))
+
+    def set_paused(self, paused):
+        self.paused = bool(paused)
 
     def stop(self, join_timeout=3.0):
         """Tell all workers to exit and clean up engine-specific resources."""
@@ -172,6 +179,8 @@ class EnginePipeline:
                 # consumers (if any) also see it, then exit.
                 self.segment_queue.put(None)
                 return
+            if self.paused:
+                continue  # drop segment, no API call
             try:
                 speaker_id = self.clusterer.assign(segment) if self.clusterer else 0
                 text = self._translator.transcribe(segment)
@@ -191,6 +200,8 @@ class EnginePipeline:
             if segment is None:
                 self.segment_queue.put(None)
                 return
+            if self.paused:
+                continue
             try:
                 speaker_id = self.clusterer.assign(segment) if self.clusterer else 0
                 text = self._local_whisper.transcribe(segment, self.capture.samplerate)
@@ -225,6 +236,8 @@ class EnginePipeline:
                 continue
             if chunk is None:
                 return
+            if self.paused:
+                continue  # drop chunk; WebSocket stays open for instant resume
             if self._rt_client is not None:
                 self._rt_client.push_audio(chunk)
 

@@ -89,7 +89,7 @@ def main():
     window = SubtitleWindow()
     window.set_level_provider(lambda: capture.current_level)
 
-    state = {"pipeline": None, "engine": args.engine, "switching": False}
+    state = {"pipeline": None, "engine": args.engine, "switching": False, "paused": False}
 
     def set_engine_status():
         label = ENGINE_LABELS.get(state["engine"], state["engine"])
@@ -150,16 +150,33 @@ def main():
                 state["pipeline"] = new_pipeline
                 state["engine"] = new_engine
                 state["switching"] = False
+                new_pipeline.set_paused(state["paused"])
                 window.set_current_engine(new_engine)
-                set_engine_status()
+                if state["paused"]:
+                    label = ENGINE_LABELS.get(new_engine, new_engine)
+                    window.set_status(f"⏸ 已暂停 · {label}")
+                else:
+                    set_engine_status()
             window.after(0, commit_success)
 
         threading.Thread(target=do_switch, daemon=True).start()
 
+    def toggle_pause():
+        state["paused"] = not state["paused"]
+        if state["pipeline"] is not None:
+            state["pipeline"].set_paused(state["paused"])
+        if state["paused"]:
+            label = ENGINE_LABELS.get(state["engine"], state["engine"])
+            window.set_status(f"⏸ 已暂停 · {label}")
+        else:
+            set_engine_status()
+
     window.set_engine_change_callback(on_engine_change)
+    window.set_pause_callback(toggle_pause)
     window.set_current_engine(args.engine)
 
     state["pipeline"] = build_pipeline(args.engine)
+    state["pipeline"].set_paused(state["paused"])
     set_engine_status()
     window.set_cost("$0.0000")
 
@@ -187,7 +204,7 @@ def main():
                     drained = True
             except queue.Empty:
                 pass
-        if drained and not state["switching"]:
+        if drained and not state["switching"] and not state["paused"]:
             set_engine_status()
         window.after(120, poll_results)
 

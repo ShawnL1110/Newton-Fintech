@@ -222,6 +222,7 @@ class SubtitleWindow:
         self._alpha_index = 1
         self._close_callback = None
         self._engine_change_callback = None
+        self._pause_callback = None
         self._maximized = False
         self._minimized = False
         self._saved_geometry = None
@@ -374,6 +375,11 @@ class SubtitleWindow:
         self.root.bind_all("<Command-S>", lambda e: self.save_history())
         self.root.bind_all("<Command-Shift-f>", lambda e: self._toggle_fullscreen_overlay())
         self.root.bind_all("<Command-Shift-F>", lambda e: self._toggle_fullscreen_overlay())
+        # Spacebar pauses/resumes translation (engine-level pause).
+        # ⌘P is provided as a backup since some focus states swallow space.
+        self.root.bind_all("<space>", lambda e: self._toggle_pause())
+        self.root.bind_all("<Command-p>", lambda e: self._toggle_pause())
+        self.root.bind_all("<Command-P>", lambda e: self._toggle_pause())
         self.root.bind_all("<Escape>", lambda e: self._quit())
 
         self.root.after(50, self._force_focus)
@@ -538,7 +544,7 @@ class SubtitleWindow:
 
     def set_status(self, text):
         self.status_var.set(
-            f"{text}   ⌘T 透明度  ⌘⇧F 浮顶  ⌘M 最小化  ⌘S 导出  ⌘Q 退出"
+            f"{text}   空格/⌘P 暂停  ⌘T 透明度  ⌘⇧F 浮顶  ⌘M 最小化  ⌘S 导出  ⌘Q 退出"
         )
 
     def set_cost(self, text):
@@ -549,6 +555,14 @@ class SubtitleWindow:
 
     def set_engine_change_callback(self, fn):
         self._engine_change_callback = fn
+
+    def set_pause_callback(self, fn):
+        """Register a no-arg callable invoked when the user toggles pause."""
+        self._pause_callback = fn
+
+    def _toggle_pause(self):
+        if self._pause_callback:
+            self._pause_callback()
 
     def set_current_engine(self, engine):
         self._engine_var.set(engine)
