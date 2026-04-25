@@ -305,8 +305,11 @@ class SubtitleWindow:
         self.content = tk.Text(
             self.root, bg=BG_COLOR, fg="#ffffff", bd=0, highlightthickness=0,
             wrap="word", padx=20, pady=6, cursor="hand2",
+            # height=1 prevents Tk's default 24-line "natural" minimum from
+            # bloating the window's required size, which used to push the
+            # status bar off-screen at small heights.
+            height=1,
         )
-        self.content.pack(fill="both", expand=True)
 
         self.content.tag_configure("orig", font=self.orig_font, foreground="#bbbbbb")
         self.content.tag_configure("zh", font=self.zh_font, foreground="#ffffff")
@@ -319,7 +322,13 @@ class SubtitleWindow:
         self._engine_var = tk.StringVar(value="batch")
 
         status_bar = tk.Frame(self.root, bg=BG_COLOR)
-        status_bar.pack(fill="x", padx=20, pady=(0, 10))
+        # Pack the status bar BEFORE the content frame, anchored to the
+        # bottom edge. This guarantees it always gets a slot regardless
+        # of how short the window gets.
+        status_bar.pack(side="bottom", fill="x", padx=20, pady=(0, 10))
+
+        # Content fills the middle (top_bar above, status_bar below).
+        self.content.pack(fill="both", expand=True)
 
         self.status = tk.Label(
             status_bar, textvariable=self.status_var, font=self.status_font,
