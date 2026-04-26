@@ -157,6 +157,9 @@ def main():
                     window.set_status(f"⏸ 已暂停 · {label}")
                 else:
                     set_engine_status()
+                # Make sure global hotkeys (space pause, ⌘S, …) keep
+                # firing — focus might have parked on the gear menu.
+                window._restore_focus()
             window.after(0, commit_success)
 
         threading.Thread(target=do_switch, daemon=True).start()

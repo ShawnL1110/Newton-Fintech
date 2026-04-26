@@ -620,10 +620,23 @@ class SubtitleWindow:
             menu.tk_popup(x, y)
         finally:
             menu.grab_release()
+            # Restore focus to root so global hotkeys (space pause, ⌘T,
+            # ⌘S …) keep working after the popup closes — otherwise the
+            # focus stays parked on the gear Label and bind_all events
+            # don't fire.
+            self._restore_focus()
 
     def _on_engine_select(self, engine):
+        self._restore_focus()
         if self._engine_change_callback:
             self._engine_change_callback(engine)
+
+    def _restore_focus(self):
+        try:
+            self.root.lift()
+            self.root.focus_force()
+        except tk.TclError:
+            pass
 
     def save_history(self):
         from tkinter import filedialog, messagebox
