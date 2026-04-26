@@ -402,6 +402,47 @@ class SubtitleWindow:
         # changes size, so hotkey hints shrink/grow to fit.
         self.root.bind("<Configure>", self._on_root_configure)
         self.waveform.start()
+        # Native NSEvent monitor for space / ⌘P so pause keeps working
+        # even when Tk's focus state is dirty (e.g. after the gear popup).
+        self.root.after(300, self._install_native_hotkeys)
+        self._native_monitor = None
+
+    def _install_native_hotkeys(self):
+        """Use AppKit NSEvent local monitor to catch space/⌘P regardless
+        of Tk focus. Fires only while our app is the active app.
+        Silently no-ops without pyobjc."""
+        if self._native_monitor is not None:
+            return
+        try:
+            from AppKit import NSEvent
+        except Exception:
+            return
+        NS_KEY_DOWN = 1 << 10
+        NS_CMD = 1 << 20
+        # macOS virtual key codes
+        VK_SPACE = 49
+        VK_P = 35
+
+        def handler(event):
+            try:
+                kc = event.keyCode()
+                mods = event.modifierFlags()
+                if kc == VK_SPACE and not (mods & NS_CMD):
+                    self.root.after(0, self._toggle_pause)
+                    return None  # consume
+                if kc == VK_P and (mods & NS_CMD):
+                    self.root.after(0, self._toggle_pause)
+                    return None
+            except Exception:
+                pass
+            return event
+
+        try:
+            self._native_monitor = (
+                NSEvent.addLocalMonitorForEventsMatchingMask_handler_(NS_KEY_DOWN, handler)
+            )
+        except Exception:
+            self._native_monitor = None
 
     def _force_focus(self):
         try:
@@ -632,11 +673,19 @@ class SubtitleWindow:
             self._engine_change_callback(engine)
 
     def _restore_focus(self):
-        try:
-            self.root.lift()
-            self.root.focus_force()
-        except tk.TclError:
-            pass
+        # Tk's tk_popup on macOS sometimes returns *before* the menu is
+        # fully dismissed, so a single focus_force right after grab_release
+        # silently fails. Schedule a few retries spread over ~500ms; cheap
+        # and highly reliable.
+        def _grab():
+            try:
+                self.root.lift()
+                self.root.focus_force()
+            except tk.TclError:
+                pass
+        _grab()
+        for delay in (50, 200, 500):
+            self.root.after(delay, _grab)
 
     def save_history(self):
         from tkinter import filedialog, messagebox
