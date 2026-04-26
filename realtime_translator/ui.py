@@ -538,15 +538,6 @@ class SubtitleWindow:
         self._render()
 
     def _render(self):
-        # Stick-to-bottom: only auto-scroll if the user was already viewing
-        # the latest content. If they scrolled up to read history, leave
-        # their position alone so live updates don't yank them back down.
-        try:
-            _, bottom_frac = self.content.yview()
-            stick_to_bottom = bottom_frac > 0.95
-        except (tk.TclError, ValueError):
-            stick_to_bottom = True
-
         self.content.configure(state="normal")
         self.content.delete("1.0", "end")
         for idx, (_ts, speaker_id, original, translation) in enumerate(self._entries):
@@ -560,9 +551,13 @@ class SubtitleWindow:
             if idx < len(self._entries) - 1:
                 self.content.insert("end", "\n\n")
         self.content.configure(state="disabled")
-
-        if stick_to_bottom:
-            self.content.see("end")
+        # Always scroll to the latest entry. The previous "stick to bottom"
+        # heuristic was unreliable — bottom_frac > 0.95 didn't always trip
+        # when the user was actually at the bottom, so see("end") was
+        # silently skipped and Tk's post-delete default of showing the top
+        # took over. To read history without being yanked back, press space
+        # to pause first.
+        self.content.see("end")
 
     def set_status(self, text):
         self._status_base = text
