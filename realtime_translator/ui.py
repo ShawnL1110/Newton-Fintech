@@ -27,7 +27,7 @@ ENGINE_MENU_LABELS = [
     ("batch",    "OpenAI (标准)"),
     ("realtime", "OpenAI Realtime (低延迟)"),
     ("mixed",    "混合 (本地转写 + OpenAI 翻译)"),
-    ("live",     "同传 Live (强制 3s commit)"),
+    ("live",     "同传 Live (累积重译·精修)"),
 ]
 
 LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo.png"
