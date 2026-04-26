@@ -376,6 +376,17 @@ class SubtitleWindow:
         self.grip.bind("<Enter>", lambda e: self.grip.configure(fg="#cccccc"))
         self.grip.bind("<Leave>", lambda e: self.grip.configure(fg="#666666"))
 
+        # Off-screen Entry that holds keyboard focus. bind_all only fires
+        # when *some* widget in the app has focus; on macOS overrideredirect
+        # windows the menu popup loses focus and never restores it cleanly.
+        # Parking it on this invisible Entry keeps bind_all reliable.
+        self._focus_holder = tk.Entry(
+            self.root, takefocus=1, width=1, bd=0,
+            highlightthickness=0, bg=BG_COLOR, fg=BG_COLOR,
+            insertbackground=BG_COLOR,
+        )
+        self._focus_holder.place(x=-100, y=-100)
+
         for w in (self.root, self.content, self.status, status_bar, self.cost_label):
             w.bind("<ButtonPress-1>", self._on_press)
             w.bind("<B1-Motion>", self._on_drag)
@@ -402,52 +413,14 @@ class SubtitleWindow:
         # changes size, so hotkey hints shrink/grow to fit.
         self.root.bind("<Configure>", self._on_root_configure)
         self.waveform.start()
-        # Native NSEvent monitor for space / ⌘P so pause keeps working
-        # even when Tk's focus state is dirty (e.g. after the gear popup).
-        self.root.after(300, self._install_native_hotkeys)
-        self._native_monitor = None
-
-    def _install_native_hotkeys(self):
-        """Use AppKit NSEvent local monitor to catch space/⌘P regardless
-        of Tk focus. Fires only while our app is the active app.
-        Silently no-ops without pyobjc."""
-        if self._native_monitor is not None:
-            return
-        try:
-            from AppKit import NSEvent
-        except Exception:
-            return
-        NS_KEY_DOWN = 1 << 10
-        NS_CMD = 1 << 20
-        # macOS virtual key codes
-        VK_SPACE = 49
-        VK_P = 35
-
-        def handler(event):
-            try:
-                kc = event.keyCode()
-                mods = event.modifierFlags()
-                if kc == VK_SPACE and not (mods & NS_CMD):
-                    self.root.after(0, self._toggle_pause)
-                    return None  # consume
-                if kc == VK_P and (mods & NS_CMD):
-                    self.root.after(0, self._toggle_pause)
-                    return None
-            except Exception:
-                pass
-            return event
-
-        try:
-            self._native_monitor = (
-                NSEvent.addLocalMonitorForEventsMatchingMask_handler_(NS_KEY_DOWN, handler)
-            )
-        except Exception:
-            self._native_monitor = None
 
     def _force_focus(self):
         try:
             self.root.lift()
             self.root.focus_force()
+            holder = getattr(self, "_focus_holder", None)
+            if holder is not None:
+                holder.focus_set()
         except tk.TclError:
             pass
 
@@ -673,15 +646,15 @@ class SubtitleWindow:
             self._engine_change_callback(engine)
 
     def _restore_focus(self):
-        # Tk's tk_popup on macOS sometimes returns *before* the menu is
-        # fully dismissed, so a single focus_force right after grab_release
-        # silently fails. Schedule a few retries spread over ~500ms; cheap
-        # and highly reliable.
+        # Park focus on the off-screen Entry so bind_all hotkeys keep
+        # firing. Tk's tk_popup on macOS can return before the menu is
+        # actually dismissed, so we retry over ~500ms — cheap and
+        # reliable.
         def _grab():
             try:
                 self.root.lift()
-                self.root.focus_force()
-            except tk.TclError:
+                self._focus_holder.focus_set()
+            except (tk.TclError, AttributeError):
                 pass
         _grab()
         for delay in (50, 200, 500):
