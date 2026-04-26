@@ -20,6 +20,7 @@ import asyncio
 import base64
 import queue
 import threading
+import time
 import traceback
 
 import numpy as np
@@ -64,6 +65,8 @@ class RealtimeClient:
         target_language="Simplified Chinese",
         live_mode=False,
         commit_interval=1.5,
+        polish_model="gpt-4o-mini",
+        max_burst_seconds=20.0,
     ):
         self.samplerate = samplerate
         self.cost = cost_tracker
@@ -72,6 +75,8 @@ class RealtimeClient:
         self.target_language = target_language
         self.live_mode = live_mode
         self.commit_interval = commit_interval
+        self.polish_model = polish_model
+        self.max_burst_seconds = max_burst_seconds
 
         # Thread-safe channels used across the UI / audio / asyncio threads.
         self.result_queue: queue.Queue = queue.Queue()
@@ -83,6 +88,18 @@ class RealtimeClient:
         # float read/write is atomic under the GIL, no lock needed.
         self._peak_rms = 0.0
         self._silence_threshold = 0.012
+
+        # Burst-polishing state for live mode. A "burst" is a run of
+        # commits with no long silence between them; we accumulate the
+        # original text across the burst, polish it via chat completions,
+        # and replace the UI tail in place. Closes on silence or when
+        # the burst exceeds max_burst_seconds.
+        self._burst_originals = []
+        self._burst_translation = ""
+        self._burst_start_time = 0.0
+        self._burst_seq = 0
+        self._polish_task = None
+        self._chat_client = None  # set in _async_main
 
         self._stop = threading.Event()
         self._ready = threading.Event()
@@ -126,6 +143,8 @@ class RealtimeClient:
             return
 
         client = AsyncOpenAI()
+        # Re-used by the burst polisher (chat.completions endpoint).
+        self._chat_client = client
         audio_q: asyncio.Queue = asyncio.Queue(maxsize=200)
 
         async def bridge_audio():
@@ -217,23 +236,30 @@ class RealtimeClient:
             et = getattr(event, "type", "")
             if et == "conversation.item.input_audio_transcription.completed":
                 current_orig = getattr(event, "transcript", "") or ""
-                # Transcription arrived; push a partial so the UI shows the
-                # original line even before translation starts streaming.
-                if current_orig:
+                # In live mode, deltas are aggregated by the burst manager
+                # at response.done — don't emit per-event partials, otherwise
+                # the UI tail flickers between this commit's text and the
+                # accumulated burst text.
+                if not self.live_mode and current_orig:
                     self.result_queue.put(("__partial__", current_orig, current_trans))
             elif et == "response.text.delta":
                 current_trans += getattr(event, "delta", "") or ""
-                # Stream every accumulated delta — the UI replaces the tail
-                # in place, so spam here is fine and gives the lyrics feel.
-                self.result_queue.put(("__partial__", current_orig, current_trans))
+                if not self.live_mode:
+                    self.result_queue.put(("__partial__", current_orig, current_trans))
             elif et == "response.text.done":
                 current_trans = getattr(event, "text", None) or current_trans
-                self.result_queue.put(("__partial__", current_orig, current_trans))
+                if not self.live_mode:
+                    self.result_queue.put(("__partial__", current_orig, current_trans))
             elif et == "response.done":
                 if current_orig or current_trans:
-                    # Final form: first element is the original text so the
-                    # bridge distinguishes it from __partial__ / __error__.
-                    self.result_queue.put((current_orig, "", current_trans))
+                    if self.live_mode:
+                        await self._on_turn_done(
+                            current_orig.strip(), current_trans.strip()
+                        )
+                    else:
+                        # Final form: first element is the original text so the
+                        # bridge distinguishes it from __partial__ / __error__.
+                        self.result_queue.put((current_orig, "", current_trans))
                 self._record_usage(event)
                 current_orig = ""
                 current_trans = ""
@@ -263,6 +289,13 @@ class RealtimeClient:
                     await conn.input_audio_buffer.clear()
                 except Exception:
                     pass
+                # Silence closes any open burst so the next utterance opens
+                # a new entry. Cancel any in-flight polish first so it
+                # can't override the finalized translation.
+                if self._burst_originals:
+                    if self._polish_task and not self._polish_task.done():
+                        self._polish_task.cancel()
+                    self._finalize_burst_now()
                 continue
 
             try:
@@ -275,6 +308,112 @@ class RealtimeClient:
                     continue
                 self.result_queue.put(("__error__", f"commit: {e}", ""))
                 return
+
+    # ---- burst-polishing (live mode) ----
+
+    async def _on_turn_done(self, original, translation):
+        """Integrate this commit's result into the running burst, emit a
+        partial that shows the accumulated text, and kick off a polish
+        pass in the background.
+        """
+        # Cancel any pending polish from the previous commit — it would
+        # land *after* this draft and look stale.
+        if self._polish_task and not self._polish_task.done():
+            self._polish_task.cancel()
+            try:
+                await self._polish_task
+            except (asyncio.CancelledError, Exception):
+                pass
+
+        now = time.monotonic()
+
+        # Force-finalize the burst if it's gotten too long, then start a
+        # fresh one with this commit's content.
+        if (
+            self._burst_originals
+            and (now - self._burst_start_time) > self.max_burst_seconds
+        ):
+            self._finalize_burst_now()
+
+        if not self._burst_originals:
+            self._burst_start_time = now
+
+        self._burst_originals.append(original)
+        # Quick draft: append this commit's translation to whatever we had.
+        if self._burst_translation:
+            self._burst_translation = (self._burst_translation + " " + translation).strip()
+        else:
+            self._burst_translation = translation
+
+        full_orig = " ".join(self._burst_originals).strip()
+        # Emit immediate (unpolished) accumulation.
+        if full_orig or self._burst_translation:
+            self.result_queue.put(("__partial__", full_orig, self._burst_translation))
+
+        # Kick off polish for the whole burst so far.
+        if full_orig:
+            self._burst_seq += 1
+            seq = self._burst_seq
+            self._polish_task = asyncio.create_task(self._polish(full_orig, seq))
+
+    def _finalize_burst_now(self):
+        """Emit the current burst as a non-partial (final) result and reset.
+        Must be called from the asyncio loop thread."""
+        if not self._burst_originals:
+            return
+        full_orig = " ".join(self._burst_originals).strip()
+        # 3-tuple final: (original_text, "", translation) — bridge converts
+        # to (speaker, orig, trans, is_partial=False) for the UI.
+        self.result_queue.put((full_orig, "", self._burst_translation))
+        self._burst_originals = []
+        self._burst_translation = ""
+        self._burst_start_time = 0.0
+
+    async def _polish(self, full_text, seq):
+        """Re-translate the whole burst as one cohesive Chinese paragraph
+        and replace the tail with the polished version. Cheap by default
+        (gpt-4o-mini); see polish_model in __init__.
+        """
+        try:
+            if self._chat_client is None:
+                return
+            resp = await self._chat_client.chat.completions.create(
+                model=self.polish_model,
+                temperature=0.2,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            f"You translate English transcripts into natural, "
+                            f"fluent {self.target_language}. The input is one "
+                            "speaker's recent utterance, possibly assembled "
+                            "from short fragments — produce a single polished, "
+                            "grammatically clean translation. Output ONLY the "
+                            "translation, no quotes, no pinyin, no comments."
+                        ),
+                    },
+                    {"role": "user", "content": full_text},
+                ],
+            )
+            polished = (resp.choices[0].message.content or "").strip()
+            # Bail out if the burst has moved on (newer commit invalidated us).
+            if seq != self._burst_seq:
+                return
+            if not polished:
+                return
+            self._burst_translation = polished
+            self.result_queue.put(("__partial__", full_text, polished))
+            usage = getattr(resp, "usage", None)
+            if usage is not None:
+                self.cost.add_text_tokens(
+                    getattr(usage, "prompt_tokens", 0) or 0,
+                    getattr(usage, "completion_tokens", 0) or 0,
+                    self.polish_model,
+                )
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            traceback.print_exc()
 
     def _record_usage(self, event):
         """Tag this turn's audio/text usage in the CostTracker."""
