@@ -366,6 +366,27 @@ class SubtitleWindow:
         self.gear_button.bind("<Enter>", lambda e: self.gear_button.configure(fg="#ffffff"))
         self.gear_button.bind("<Leave>", lambda e: self.gear_button.configure(fg="#888888"))
 
+        # In-window engine picker. Built from plain Tk widgets so it doesn't
+        # spawn a native NSMenu — that's what was killing the keyboard focus
+        # chain after a selection on macOS overrideredirect windows.
+        self._popup_visible = False
+        self._engine_popup = tk.Frame(
+            self.root, bg="#1c1c1e",
+            highlightbackground="#3a3a3a", highlightthickness=1, bd=0,
+        )
+        self._engine_popup_items = {}
+        for value, label in ENGINE_MENU_LABELS:
+            item = tk.Label(
+                self._engine_popup, text=f"   {label}",
+                font=self.status_font, bg="#1c1c1e", fg="#ffffff",
+                anchor="w", padx=14, pady=8, cursor="hand2",
+            )
+            item.pack(fill="x")
+            item.bind("<Button-1>", lambda e, v=value: self._on_engine_select(v))
+            item.bind("<Enter>", lambda e, w=item: w.configure(bg="#3a3a3a"))
+            item.bind("<Leave>", lambda e, w=item: w.configure(bg="#1c1c1e"))
+            self._engine_popup_items[value] = item
+
         self.grip = tk.Label(
             self.root, text="◢", font=self.grip_font,
             fg="#666666", bg=BG_COLOR, cursor="bottom_right_corner",
@@ -406,7 +427,7 @@ class SubtitleWindow:
         self.root.bind_all("<space>", lambda e: self._toggle_pause())
         self.root.bind_all("<Command-p>", lambda e: self._toggle_pause())
         self.root.bind_all("<Command-P>", lambda e: self._toggle_pause())
-        self.root.bind_all("<Escape>", lambda e: self._quit())
+        self.root.bind_all("<Escape>", self._on_escape)
 
         self.root.after(50, self._force_focus)
         # Re-render the adaptive status hints whenever the root window
@@ -620,28 +641,43 @@ class SubtitleWindow:
         self._engine_var.set(engine)
 
     def _show_engine_menu(self, event=None):
-        menu = tk.Menu(self.root, tearoff=0)
-        for value, label in ENGINE_MENU_LABELS:
-            menu.add_radiobutton(
-                label=label,
-                variable=self._engine_var,
-                value=value,
-                command=lambda v=value: self._on_engine_select(v),
-            )
-        try:
-            x = self.gear_button.winfo_rootx()
-            y = self.gear_button.winfo_rooty() + self.gear_button.winfo_height() + 4
-            menu.tk_popup(x, y)
-        finally:
-            menu.grab_release()
-            # Restore focus to root so global hotkeys (space pause, ⌘T,
-            # ⌘S …) keep working after the popup closes — otherwise the
-            # focus stays parked on the gear Label and bind_all events
-            # don't fire.
-            self._restore_focus()
+        # Toggle: clicking the gear again hides the popup.
+        if getattr(self, "_popup_visible", False):
+            self._hide_engine_popup()
+            return
+        self._update_engine_popup_marks()
+        # Position the popup just below the gear button, right-aligned to it.
+        self._engine_popup.update_idletasks()
+        popup_w = self._engine_popup.winfo_reqwidth()
+        gear_x = self.gear_button.winfo_rootx() - self.root.winfo_rootx()
+        gear_y = self.gear_button.winfo_rooty() - self.root.winfo_rooty()
+        x = gear_x + self.gear_button.winfo_width() - popup_w
+        y = gear_y + self.gear_button.winfo_height() + 4
+        # Keep it on-screen
+        x = max(4, min(x, self.root.winfo_width() - popup_w - 4))
+        self._engine_popup.place(x=x, y=y)
+        self._engine_popup.lift()
+        self._popup_visible = True
+
+    def _hide_engine_popup(self):
+        self._engine_popup.place_forget()
+        self._popup_visible = False
+
+    def _on_escape(self, event=None):
+        if getattr(self, "_popup_visible", False):
+            self._hide_engine_popup()
+        else:
+            self._quit()
+
+    def _update_engine_popup_marks(self):
+        current = self._engine_var.get()
+        for value, item in self._engine_popup_items.items():
+            label = next(lab for v, lab in ENGINE_MENU_LABELS if v == value)
+            prefix = "✓ " if value == current else "   "
+            item.configure(text=f"{prefix}{label}")
 
     def _on_engine_select(self, engine):
-        self._restore_focus()
+        self._hide_engine_popup()
         if self._engine_change_callback:
             self._engine_change_callback(engine)
 
