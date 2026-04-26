@@ -646,15 +646,18 @@ class SubtitleWindow:
             self._hide_engine_popup()
             return
         self._update_engine_popup_marks()
-        # Position the popup just below the gear button, right-aligned to it.
+        # The gear lives in the bottom status bar, so place the popup
+        # ABOVE it (placing below would be off-screen).
         self._engine_popup.update_idletasks()
         popup_w = self._engine_popup.winfo_reqwidth()
+        popup_h = self._engine_popup.winfo_reqheight()
         gear_x = self.gear_button.winfo_rootx() - self.root.winfo_rootx()
         gear_y = self.gear_button.winfo_rooty() - self.root.winfo_rooty()
         x = gear_x + self.gear_button.winfo_width() - popup_w
-        y = gear_y + self.gear_button.winfo_height() + 4
+        y = gear_y - popup_h - 4
         # Keep it on-screen
         x = max(4, min(x, self.root.winfo_width() - popup_w - 4))
+        y = max(4, y)
         self._engine_popup.place(x=x, y=y)
         self._engine_popup.lift()
         self._popup_visible = True
